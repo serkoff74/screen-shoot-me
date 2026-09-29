@@ -2,6 +2,7 @@ import type { Annotation, Bounds, LabelAnchorSide, Point } from '../shared';
 
 export const LABEL_MIN_WIDTH = 120;
 export const LABEL_MIN_HEIGHT = 54;
+export const LABEL_MAX_AUTO_HEIGHT = 240;
 const LABEL_HORIZONTAL_PADDING = 22;
 const LABEL_VERTICAL_PADDING = 14;
 const LABEL_LINE_HEIGHT = 20;
@@ -60,7 +61,10 @@ export function labelLayout(annotation: Annotation, canvasWidth: number, canvasH
   const width = Math.max(LABEL_MIN_WIDTH, annotation.labelWidth ?? naturalWidth);
   const lines = wrapLabelLines(label, width - LABEL_HORIZONTAL_PADDING);
   const naturalHeight = Math.max(LABEL_MIN_HEIGHT, lines.length * LABEL_LINE_HEIGHT + LABEL_VERTICAL_PADDING);
-  const height = Math.max(naturalHeight, annotation.labelHeight ?? 0);
+  const hasManualHeight = annotation.labelHeightManual ?? annotation.labelHeight != null;
+  // A manually chosen height is authoritative; long text remains editable in
+  // the scrollable field instead of silently expanding the card again.
+  const height = hasManualHeight ? Math.max(LABEL_MIN_HEIGHT, annotation.labelHeight ?? 0) : Math.min(LABEL_MAX_AUTO_HEIGHT, naturalHeight);
   const anchor = labelAnchor(annotation);
   const preferredX = annotation.labelX ?? anchor.x + 14;
   const preferredY = annotation.labelY ?? anchor.y - 10;
@@ -265,6 +269,7 @@ export function resizedLabel(annotation: Annotation, handle: Exclude<LabelHandle
     labelY: y,
     labelWidth: Math.min(width, canvasWidth - x - 8),
     labelHeight: Math.min(height, canvasHeight - y - 8),
+    labelHeightManual: true,
   } as Annotation;
 }
 

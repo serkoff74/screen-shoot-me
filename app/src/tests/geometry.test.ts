@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { boundsOf, cardAnchor, captureScale, commentArrowRoute, hitTest, hitTestLabel, hitTestLabelResize, labelAnchor, labelBounds, labelHandleAt, labelHandles, labelResizeHandleBounds, moved, movedLabel, normalizedBounds, pointToSegmentDistance, resizedLabel, withCardAnchor, wrapLabelLines } from '../editor/geometry';
+import { boundsOf, cardAnchor, captureScale, commentArrowRoute, hitTest, hitTestLabel, hitTestLabelResize, LABEL_MAX_AUTO_HEIGHT, labelAnchor, labelBounds, labelHandleAt, labelHandles, labelResizeHandleBounds, moved, movedLabel, normalizedBounds, pointToSegmentDistance, resizedLabel, withCardAnchor, wrapLabelLines } from '../editor/geometry';
 import type { Annotation } from '../shared';
 
 const arrow: Annotation = { id: 'a', tool: 'arrow', color: '#FF4D2E', width: 4, start: { x: 10, y: 20 }, end: { x: 110, y: 70 } };
@@ -44,6 +44,14 @@ describe('annotation geometry', () => {
     expect(labelHandles(labeled, 500, 500)).toHaveLength(9);
     expect(labelHandleAt(labeled, { x: box.x + box.width / 2, y: box.y + box.height / 2 }, 500, 500)).toBe('move');
     expect(resizedLabel(labeled, 'se', 80, 40, 500, 500)).toMatchObject({ labelWidth: box.width + 80, labelHeight: box.height + 40 });
+  });
+  it('auto-fits a comment height within its maximum and preserves a manual height', () => {
+    const short = { ...arrow, label: 'Коротко', labelWidth: 180 };
+    expect(labelBounds(short, 600, 600)!.height).toBe(54);
+    const long = { ...short, label: Array.from({ length: 80 }, () => 'длинный').join(' ') };
+    expect(labelBounds(long, 600, 1200)!.height).toBe(LABEL_MAX_AUTO_HEIGHT);
+    const manuallyResized = { ...long, labelHeight: 360, labelHeightManual: true };
+    expect(labelBounds(manuallyResized, 600, 1200)!.height).toBe(360);
   });
   it.each([
     [1280, 800, 1280, 800, 1],

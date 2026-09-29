@@ -79,7 +79,10 @@ function drawLabel(ctx: CanvasRenderingContext2D, annotation: Annotation): void 
   ctx.lineWidth = 1;
   ctx.stroke();
   ctx.fillStyle = '#fff';
-  lines.forEach((line, index) => ctx.fillText(line, x + 11, y + 21 + index * 20));
+  const visibleLineCount = Math.max(1, Math.floor((height - 14) / 20));
+  const visibleLines = lines.slice(0, visibleLineCount);
+  if (visibleLines.length < lines.length) visibleLines[visibleLines.length - 1] = `${visibleLines[visibleLines.length - 1]!.replace(/…$/, '').slice(0, -1)}…`;
+  visibleLines.forEach((line, index) => ctx.fillText(line, x + 11, y + 21 + index * 20));
   ctx.restore();
 }
 

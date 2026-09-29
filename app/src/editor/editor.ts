@@ -1,5 +1,5 @@
 import { DEFAULT_SETTINGS, exportFilename, makeId, type Annotation, type Bounds, type Point, type SnapmarkSettings, type Tool } from '../shared';
-import { captureScale, hitTest, hitTestLabel, isDrawable, labelAnchor, labelBounds, labelHandleAt, type LabelHandlePosition, moved, movedLabel, normalizedBounds, resizedLabel, withCardAnchor } from './geometry';
+import { captureScale, hitTest, hitTestLabel, isDrawable, LABEL_MAX_AUTO_HEIGHT, labelAnchor, labelBounds, labelHandleAt, type LabelHandlePosition, moved, movedLabel, normalizedBounds, resizedLabel, withCardAnchor } from './geometry';
 import { History } from './history';
 import { icon } from './icons';
 import { commentKeyAction, historyKeyAction } from './keyboard';
@@ -223,6 +223,7 @@ function showEditor(root: HTMLElement, background: HTMLCanvasElement, settings: 
   let resizingLabel: Exclude<LabelHandlePosition, 'move'> | null = null;
   let commentOriginal = '';
   let editingId: string | null = null;
+  let commentHasManualHeight = false;
   let exporting = false;
 
   const render = () => drawScene(ctx, background, draft ? [...annotations.filter((a) => a.id !== draft!.id), draft] : annotations, { selectedId, showSelection: currentTool === 'select' });
@@ -243,6 +244,7 @@ function showEditor(root: HTMLElement, background: HTMLCanvasElement, settings: 
   const openComment = (annotation: Annotation, existing = false) => {
     editingId = annotation.id;
     commentOriginal = existing ? annotation.label ?? '' : '';
+    commentHasManualHeight = annotation.labelHeightManual ?? annotation.labelHeight != null;
     const popup = root.querySelector<HTMLElement>('.comment')!;
     const textarea = popup.querySelector<HTMLTextAreaElement>('textarea')!;
     const canvasRect = canvas.getBoundingClientRect();
@@ -252,13 +254,14 @@ function showEditor(root: HTMLElement, background: HTMLCanvasElement, settings: 
     const labelX = label?.x ?? anchor.x + 14;
     const labelY = label?.y ?? anchor.y - 10;
     const popupWidth = Math.max(200, Math.min(window.innerWidth - 16, (label?.width ?? 280) * scale));
-    const popupHeight = Math.max(132, Math.min(window.innerHeight - 16, (label?.height ?? 158) * scale));
+    const popupHeight = Math.max(96, Math.min(window.innerHeight - 16, (label?.height ?? 112) * scale));
     popup.style.width = `${popupWidth}px`;
     popup.style.height = `${popupHeight}px`;
     popup.style.left = `${Math.min(window.innerWidth - popupWidth - 8, Math.max(8, canvasRect.left + labelX * scale))}px`;
     popup.style.top = `${Math.min(window.innerHeight - popupHeight - 8, Math.max(8, canvasRect.top + labelY * scale))}px`;
     popup.classList.remove('hidden');
     textarea.value = annotation.label ?? '';
+    autoGrowComment();
     textarea.focus();
   };
   const commitComment = () => {
@@ -270,10 +273,12 @@ function showEditor(root: HTMLElement, background: HTMLCanvasElement, settings: 
     const rect = popup.getBoundingClientRect();
     const next = annotations.map((a) => a.id === editingId ? withCardAnchor({
       ...a, label: value, labelX: (rect.left - canvasRect.left) * scale, labelY: (rect.top - canvasRect.top) * scale,
-      labelWidth: rect.width * scale, labelHeight: rect.height * scale,
+      labelWidth: rect.width * scale,
+      labelHeight: commentHasManualHeight ? rect.height * scale : undefined,
+      labelHeightManual: commentHasManualHeight,
     } as Annotation, canvas.width, canvas.height) : a);
     const old = annotations.find((a) => a.id === editingId);
-    if (old && (old.label !== value || old.labelX !== next.find((a) => a.id === editingId)?.labelX || old.labelY !== next.find((a) => a.id === editingId)?.labelY || old.labelWidth !== next.find((a) => a.id === editingId)?.labelWidth || old.labelHeight !== next.find((a) => a.id === editingId)?.labelHeight)) setAnnotations(next);
+    if (old && (old.label !== value || old.labelX !== next.find((a) => a.id === editingId)?.labelX || old.labelY !== next.find((a) => a.id === editingId)?.labelY || old.labelWidth !== next.find((a) => a.id === editingId)?.labelWidth || old.labelHeight !== next.find((a) => a.id === editingId)?.labelHeight || old.labelHeightManual !== next.find((a) => a.id === editingId)?.labelHeightManual)) setAnnotations(next);
     popup.classList.add('hidden');
     editingId = null;
     canvas.focus();
@@ -366,6 +371,7 @@ function showEditor(root: HTMLElement, background: HTMLCanvasElement, settings: 
     if (!editingId || event.button !== 0) return;
     const popup = root.querySelector<HTMLElement>('.comment')!;
     const rect = popup.getBoundingClientRect();
+    commentHasManualHeight = true;
     commentResize = { id: editingId, pointerX: event.clientX, pointerY: event.clientY, width: rect.width, height: rect.height };
     commentResizeHandle.setPointerCapture(event.pointerId);
     event.preventDefault(); event.stopPropagation();
@@ -374,7 +380,7 @@ function showEditor(root: HTMLElement, background: HTMLCanvasElement, settings: 
     if (!commentResize) return;
     const popup = root.querySelector<HTMLElement>('.comment')!;
     popup.style.width = `${Math.min(window.innerWidth - popup.getBoundingClientRect().left - 8, Math.max(200, commentResize.width + event.clientX - commentResize.pointerX))}px`;
-    popup.style.height = `${Math.min(window.innerHeight - popup.getBoundingClientRect().top - 8, Math.max(132, commentResize.height + event.clientY - commentResize.pointerY))}px`;
+    popup.style.height = `${Math.min(window.innerHeight - popup.getBoundingClientRect().top - 8, Math.max(96, commentResize.height + event.clientY - commentResize.pointerY))}px`;
   });
   commentResizeHandle.addEventListener('pointerup', (event) => {
     if (!commentResize) return;
@@ -386,7 +392,7 @@ function showEditor(root: HTMLElement, background: HTMLCanvasElement, settings: 
     const id = commentResize.id;
     commentResize = null;
     setAnnotations(annotations.map((annotation) => annotation.id === id
-      ? { ...annotation, labelWidth: rect.width * scale, labelHeight: rect.height * scale } as Annotation : annotation));
+      ? { ...annotation, labelWidth: rect.width * scale, labelHeight: rect.height * scale, labelHeightManual: true } as Annotation : annotation));
   });
   const colorInput = root.querySelector<HTMLInputElement>('[data-setting="color"]')!;
   const widthInput = root.querySelector<HTMLInputElement>('[data-setting="width"]')!;
@@ -473,6 +479,18 @@ function showEditor(root: HTMLElement, background: HTMLCanvasElement, settings: 
   });
 
   const textarea = root.querySelector<HTMLTextAreaElement>('.comment textarea')!;
+  const autoGrowComment = () => {
+    if (!editingId || commentHasManualHeight) return;
+    const popup = root.querySelector<HTMLElement>('.comment')!;
+    textarea.style.height = '0px';
+    const contentHeight = textarea.scrollHeight;
+    textarea.style.height = '';
+    const canvasRect = canvas.getBoundingClientRect();
+    const scale = canvasRect.width / canvas.width;
+    const maxHeight = Math.min(window.innerHeight - 16, LABEL_MAX_AUTO_HEIGHT * scale);
+    popup.style.height = `${Math.min(maxHeight, Math.max(96, 67 + contentHeight))}px`;
+  };
+  textarea.addEventListener('input', autoGrowComment);
   textarea.addEventListener('keydown', (event) => {
     event.stopPropagation();
     const action = commentKeyAction(event);

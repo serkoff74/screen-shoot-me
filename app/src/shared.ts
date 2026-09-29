@@ -17,6 +17,8 @@ export type BaseAnnotation = {
   /** Explicit comment-card dimensions in canvas pixels. */
   labelWidth?: number;
   labelHeight?: number;
+  /** A user-resized height must not be replaced by automatic text fitting. */
+  labelHeightManual?: boolean;
   /** Stable point where a comment-owned arrow leaves its card. */
   labelAnchorSide?: LabelAnchorSide;
   /** Position on the anchor side, from 0 (start) through 1 (end). */
