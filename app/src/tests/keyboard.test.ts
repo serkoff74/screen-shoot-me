@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { commentKeyAction, historyKeyAction } from '../editor/keyboard';
+import { commentKeyAction, historyKeyAction, isPrintScreenKey } from '../editor/keyboard';
 
 describe('comment keyboard contract', () => {
   it('commits on plain Enter', () => {
@@ -20,6 +20,12 @@ describe('comment keyboard contract', () => {
     expect(historyKeyAction({ key: 'z', ctrlKey: true, metaKey: false, shiftKey: false })).toBe('undo');
     expect(historyKeyAction({ key: 'z', ctrlKey: true, metaKey: false, shiftKey: true })).toBe('redo');
     expect(historyKeyAction({ key: 'y', ctrlKey: false, metaKey: true, shiftKey: false })).toBe('redo');
+  });
+
+  it('detects PrintScreen by key or physical code', () => {
+    expect(isPrintScreenKey({ key: 'PrintScreen' })).toBe(true);
+    expect(isPrintScreenKey({ key: 'Unidentified', code: 'PrintScreen' })).toBe(true);
+    expect(isPrintScreenKey({ key: 'Insert', code: 'Insert' })).toBe(false);
   });
 
   it('matches the physical key so history works on a non-Latin layout', () => {

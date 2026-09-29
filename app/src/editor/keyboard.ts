@@ -7,6 +7,17 @@ export function commentKeyAction(event: CommentKeyInput): CommentKeyAction {
   return event.shiftKey || event.ctrlKey ? 'newline' : 'commit';
 }
 
+export type KeyLike = Pick<KeyboardEvent, 'key'> & { code?: string };
+
+/**
+ * `PrintScreen` cannot be bound through the Chrome commands API (unsupported key
+ * and it requires Ctrl/Alt), so it is detected from raw key events instead. The
+ * event only arrives when the OS/desktop environment does not grab the key.
+ */
+export function isPrintScreenKey(event: KeyLike): boolean {
+  return event.key === 'PrintScreen' || event.code === 'PrintScreen';
+}
+
 export type HistoryKeyInput = Pick<KeyboardEvent, 'key' | 'shiftKey' | 'ctrlKey' | 'metaKey'> & { code?: string };
 
 export function historyKeyAction(event: HistoryKeyInput): 'undo' | 'redo' | 'ignore' {
