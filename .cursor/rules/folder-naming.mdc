@@ -1,0 +1,11 @@
+---
+description: Require lowercase directory names
+alwaysApply: true
+---
+
+# Имена папок
+
+- Все папки называются в нижнем регистре: `src`, `editor`, `pending`, `completed`.
+- Заглавные буквы в именах папок запрещены.
+- Если слов несколько — разделяй дефисом (`kebab-case`), например `browser-qa`.
+- Правило касается папок; имена файлов могут содержать заглавные буквы (`README.md`, `TASK-001-....md`).

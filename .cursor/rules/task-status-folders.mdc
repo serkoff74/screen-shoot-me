@@ -1,0 +1,10 @@
+---
+description: Keep the task status folders tracked in git
+alwaysApply: true
+---
+
+# Папки статусов задач
+
+- Папки `.tasks/pending`, `.tasks/progress`, `.tasks/completed` всегда должны быть в git.
+- Даже пустая папка статуса остаётся в репозитории благодаря файлу `.gitkeep`.
+- Не удаляй эти папки и их `.gitkeep`; при смене статуса переноси файл задачи, а не папку.
