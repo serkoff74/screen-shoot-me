@@ -23,6 +23,19 @@ export type BaseAnnotation = {
   labelAnchorSide?: LabelAnchorSide;
   /** Position on the anchor side, from 0 (start) through 1 (end). */
   labelAnchorRatio?: number;
+  /**
+   * When set, this arrow is a "child" arrow owned by the comment card with
+   * this id. Its `start` point is recomputed from the owner's bounds whenever
+   * the owner moves or resizes.
+   */
+  cardOwnerId?: string;
+  /**
+   * Normalised position of the port on the owner card's boundary.
+   * Both values are in [0, 1]: (0,0) = top-left corner, (0.5,0) = top-centre,
+   * (1,0.5) = right-centre, etc.
+   */
+  cardPortX?: number;
+  cardPortY?: number;
 };
 
 export type ShapeAnnotation = BaseAnnotation & {
@@ -72,7 +85,8 @@ export type ExportMessage = {
 };
 export type CloseMessage = { type: 'SNAPMARK_CLOSE' };
 export type OffscreenCopyMessage = { type: 'SNAPMARK_COPY_OFFSCREEN'; dataUrl: string };
-export type RuntimeMessage = StartMessage | BeginSelectionMessage | CaptureRegionMessage | ExportMessage | CloseMessage | OffscreenCopyMessage;
+export type OpenShortcutsMessage = { type: 'SNAPMARK_OPEN_SHORTCUTS' };
+export type RuntimeMessage = StartMessage | BeginSelectionMessage | CaptureRegionMessage | ExportMessage | CloseMessage | OffscreenCopyMessage | OpenShortcutsMessage;
 
 export function makeId(): string {
   return crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;

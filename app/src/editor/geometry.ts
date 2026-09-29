@@ -3,6 +3,10 @@ import type { Annotation, Bounds, LabelAnchorSide, Point } from '../shared';
 export const LABEL_MIN_WIDTH = 120;
 export const LABEL_MIN_HEIGHT = 54;
 export const LABEL_MAX_AUTO_HEIGHT = 240;
+/** Distance between the card border and the resize-handle frame. */
+export const LABEL_HANDLE_PADDING = 10;
+/** Side length of a square resize handle. */
+export const LABEL_HANDLE_SIZE = 9;
 const LABEL_HORIZONTAL_PADDING = 22;
 const LABEL_VERTICAL_PADDING = 14;
 const LABEL_LINE_HEIGHT = 20;
@@ -138,14 +142,39 @@ function segmentIntersectsBounds(a: Point, b: Point, box: Bounds): boolean {
     && from < to && to > 0.0001 && from < 0.9999;
 }
 
+/**
+ * Resolves the start point of an arrow. Child arrows are owned by a comment
+ * card and leave it through a normalised port, so their start is derived from
+ * the owner's current bounds instead of a stored coordinate.
+ */
+export function arrowStart(annotation: Annotation, annotations: Annotation[], canvasWidth: number, canvasHeight: number): Point {
+  if (annotation.tool !== 'arrow') return (annotation as { start: Point }).start;
+  if (annotation.cardOwnerId && annotation.cardPortX != null && annotation.cardPortY != null) {
+    const owner = annotations.find((item) => item.id === annotation.cardOwnerId);
+    const port = owner ? cardPortPoint(owner, annotation.cardPortX, annotation.cardPortY, canvasWidth, canvasHeight) : null;
+    if (port) return port;
+  }
+  return annotation.start;
+}
+
 /** Returns a short visibility route around other comment cards and their safe area. */
 export function commentArrowRoute(annotation: Annotation, annotations: Annotation[], canvasWidth: number, canvasHeight: number, padding = 16): Point[] | null {
-  if (annotation.tool !== 'arrow' || !annotation.label?.trim()) return null;
-  const anchor = cardAnchor(annotation, canvasWidth, canvasHeight);
-  if (!anchor) return null;
-  const obstacles = annotations.filter((item) => item.id !== annotation.id && item.label?.trim())
+  if (annotation.tool !== 'arrow') return null;
+  const ownerId = annotation.cardOwnerId;
+  let start: Point | null;
+  let excludedId = annotation.id;
+  if (ownerId) {
+    // The owner card is where the arrow leaves from, so it is not an obstacle.
+    start = arrowStart(annotation, annotations, canvasWidth, canvasHeight);
+    excludedId = ownerId;
+  } else {
+    if (!annotation.label?.trim()) return null;
+    start = cardAnchor(annotation, canvasWidth, canvasHeight)?.point ?? null;
+  }
+  if (!start) return null;
+  const obstacles = annotations.filter((item) => item.id !== annotation.id && item.id !== excludedId && item.label?.trim())
     .map((item) => labelBounds(item, canvasWidth, canvasHeight)).filter((item): item is Bounds => Boolean(item)).map((item) => expanded(item, padding));
-  const nodes: Point[] = [anchor.point, annotation.end];
+  const nodes: Point[] = [start, annotation.end];
   const clearance = 2;
   obstacles.forEach((box) => nodes.push(
     { x: box.x - clearance, y: box.y - clearance }, { x: box.x + box.width + clearance, y: box.y - clearance },
@@ -164,7 +193,7 @@ export function commentArrowRoute(annotation: Annotation, annotations: Annotatio
       if (candidate < distances[next]!) { distances[next] = candidate; previous[next] = current; }
     }
   }
-  if (!Number.isFinite(distances[1])) return [anchor.point, annotation.end];
+  if (!Number.isFinite(distances[1])) return [start, annotation.end];
   const route: Point[] = [];
   for (let cursor = 1; cursor >= 0; cursor = previous[cursor]!) { route.unshift(nodes[cursor]!); if (cursor === 0) break; }
   return route;
@@ -219,25 +248,30 @@ export function movedLabel(annotation: Annotation, dx: number, dy: number, canva
 }
 
 export function labelResizeHandleBounds(annotation: Annotation, canvasWidth: number, canvasHeight: number): Bounds | null {
-  const label = labelBounds(annotation, canvasWidth, canvasHeight);
-  return label ? { x: label.x + label.width - 2, y: label.y + label.height - 2, width: 16, height: 16 } : null;
+  return labelHandles(annotation, canvasWidth, canvasHeight).find(({ position }) => position === 'se')?.bounds ?? null;
 }
 
+/**
+ * Eight square resize handles placed on a frame {@link LABEL_HANDLE_PADDING}
+ * outside the card. Keeping them away from the card border leaves the border
+ * free for connection ports, so resizing never competes with creating arrows.
+ */
 export function labelHandles(annotation: Annotation, canvasWidth: number, canvasHeight: number): LabelHandle[] {
   const label = labelBounds(annotation, canvasWidth, canvasHeight);
   if (!label) return [];
-  const x = label.x - 4;
-  const y = label.y - 4;
-  const right = label.x + label.width + 4;
-  const bottom = label.y + label.height + 4;
+  const x = label.x - LABEL_HANDLE_PADDING;
+  const y = label.y - LABEL_HANDLE_PADDING;
+  const right = label.x + label.width + LABEL_HANDLE_PADDING;
+  const bottom = label.y + label.height + LABEL_HANDLE_PADDING;
   const middleX = (x + right) / 2;
   const middleY = (y + bottom) / 2;
   const points: Array<[LabelHandlePosition, number, number]> = [
     ['nw', x, y], ['n', middleX, y], ['ne', right, y],
-    ['w', x, middleY], ['move', middleX, middleY], ['e', right, middleY],
+    ['w', x, middleY], ['e', right, middleY],
     ['sw', x, bottom], ['s', middleX, bottom], ['se', right, bottom],
   ];
-  return points.map(([position, handleX, handleY]) => ({ position, bounds: { x: handleX - 5, y: handleY - 5, width: 10, height: 10 } }));
+  const half = LABEL_HANDLE_SIZE / 2;
+  return points.map(([position, handleX, handleY]) => ({ position, bounds: { x: handleX - half, y: handleY - half, width: LABEL_HANDLE_SIZE, height: LABEL_HANDLE_SIZE } }));
 }
 
 export function labelHandleAt(annotation: Annotation, point: Point, canvasWidth: number, canvasHeight: number): LabelHandlePosition | null {
@@ -276,4 +310,76 @@ export function resizedLabel(annotation: Annotation, handle: Exclude<LabelHandle
 export function isDrawable(annotation: Annotation): boolean {
   const b = boundsOf(annotation);
   return annotation.tool === 'pencil' ? annotation.points.length > 1 : annotation.tool === 'text' || b.width + b.height >= 8;
+}
+
+// ---------------------------------------------------------------------------
+// Card port geometry
+// ---------------------------------------------------------------------------
+
+/**
+ * The 8 port positions expressed as normalised (portX, portY) pairs.
+ * (0,0) = top-left, (0.5,0) = top-centre, (1,0) = top-right, …
+ */
+export const CARD_PORTS: ReadonlyArray<{ portX: number; portY: number }> = [
+  { portX: 0, portY: 0 },    // 0 top-left
+  { portX: 0.5, portY: 0 },  // 1 top-centre
+  { portX: 1, portY: 0 },    // 2 top-right
+  { portX: 1, portY: 0.5 },  // 3 right-centre
+  { portX: 1, portY: 1 },    // 4 bottom-right
+  { portX: 0.5, portY: 1 },  // 5 bottom-centre
+  { portX: 0, portY: 1 },    // 6 bottom-left
+  { portX: 0, portY: 0.5 },  // 7 left-centre
+];
+
+/**
+ * Resolves a normalised port position to an absolute canvas point using the
+ * current bounds of the owner annotation's comment card.
+ */
+export function cardPortPoint(owner: Annotation, portX: number, portY: number, canvasWidth: number, canvasHeight: number): Point | null {
+  const label = labelBounds(owner, canvasWidth, canvasHeight);
+  if (!label) return null;
+  return { x: label.x + label.width * portX, y: label.y + label.height * portY };
+}
+
+/**
+ * Returns all 8 absolute port positions for the given annotation's comment
+ * card, or an empty array if the annotation has no visible card.
+ */
+export function cardPorts(owner: Annotation, canvasWidth: number, canvasHeight: number): Point[] {
+  const label = labelBounds(owner, canvasWidth, canvasHeight);
+  if (!label) return [];
+  return CARD_PORTS.map(({ portX, portY }) => ({
+    x: label.x + label.width * portX,
+    y: label.y + label.height * portY,
+  }));
+}
+
+/**
+ * Hit-tests the 8 ports of the given annotation.
+ * Returns the port index (0-7) if the point is within `radius` of a port, or
+ * -1 if no port was hit.
+ */
+export function portHitTest(owner: Annotation, point: Point, canvasWidth: number, canvasHeight: number, radius = 8): number {
+  const ports = cardPorts(owner, canvasWidth, canvasHeight);
+  for (let i = 0; i < ports.length; i += 1) {
+    const p = ports[i]!;
+    if (Math.hypot(point.x - p.x, point.y - p.y) <= radius) return i;
+  }
+  return -1;
+}
+
+/**
+ * Recomputes the stored `start` of every child arrow from its owner card's
+ * current bounds. Call after any move, resize or comment change so hit-testing
+ * and saved snapshots stay aligned with the rendered geometry.
+ */
+export function syncChildArrows(annotations: Annotation[], canvasWidth: number, canvasHeight: number): Annotation[] {
+  const owners = new Map(annotations.map((annotation) => [annotation.id, annotation]));
+  return annotations.map((annotation) => {
+    if (annotation.cardOwnerId == null || annotation.cardPortX == null || annotation.cardPortY == null) return annotation;
+    const owner = owners.get(annotation.cardOwnerId);
+    if (!owner) return annotation;
+    const start = cardPortPoint(owner, annotation.cardPortX, annotation.cardPortY, canvasWidth, canvasHeight);
+    return start ? { ...annotation, start } as Annotation : annotation;
+  });
 }

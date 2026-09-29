@@ -12,6 +12,7 @@ const paths: Record<string, string> = {
   close: '<path d="M18 6l-12 12"/><path d="M6 6l12 12"/>',
   check: '<path d="M5 12l5 5l10-10"/>',
   grip: '<path d="M9 5v.01"/><path d="M9 12v.01"/><path d="M9 19v.01"/><path d="M15 5v.01"/><path d="M15 12v.01"/><path d="M15 19v.01"/>',
+  crop: '<path d="M6 3v15a3 3 0 0 0 3 3h12"/><path d="M18 21V6a3 3 0 0 0-3-3H3"/>',
   trash: '<path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M5 7l1 14h12l1-14"/><path d="M9 7v-3h6v3"/>',
 };
 

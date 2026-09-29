@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { boundsOf, cardAnchor, captureScale, commentArrowRoute, hitTest, hitTestLabel, hitTestLabelResize, LABEL_MAX_AUTO_HEIGHT, labelAnchor, labelBounds, labelHandleAt, labelHandles, labelResizeHandleBounds, moved, movedLabel, normalizedBounds, pointToSegmentDistance, resizedLabel, withCardAnchor, wrapLabelLines } from '../editor/geometry';
+import { arrowStart, boundsOf, cardAnchor, cardPortPoint, cardPorts, captureScale, commentArrowRoute, hitTest, hitTestLabel, hitTestLabelResize, LABEL_MAX_AUTO_HEIGHT, labelAnchor, labelBounds, labelHandleAt, labelHandles, labelResizeHandleBounds, moved, movedLabel, normalizedBounds, pointToSegmentDistance, portHitTest, resizedLabel, syncChildArrows, withCardAnchor, wrapLabelLines } from '../editor/geometry';
 import type { Annotation } from '../shared';
 
 const arrow: Annotation = { id: 'a', tool: 'arrow', color: '#FF4D2E', width: 4, start: { x: 10, y: 20 }, end: { x: 110, y: 70 } };
@@ -41,8 +41,10 @@ describe('annotation geometry', () => {
     expect(box.height).toBeGreaterThan(54);
     const handle = labelResizeHandleBounds(labeled, 500, 500)!;
     expect(hitTestLabelResize(labeled, { x: handle.x + 2, y: handle.y + 2 }, 500, 500)).toBe(true);
-    expect(labelHandles(labeled, 500, 500)).toHaveLength(9);
-    expect(labelHandleAt(labeled, { x: box.x + box.width / 2, y: box.y + box.height / 2 }, 500, 500)).toBe('move');
+    expect(labelHandles(labeled, 500, 500)).toHaveLength(8);
+    const center = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    expect(labelHandleAt(labeled, center, 500, 500)).toBeNull();
+    expect(hitTestLabel(labeled, center, 500, 500)).toBe(true);
     expect(resizedLabel(labeled, 'se', 80, 40, 500, 500)).toMatchObject({ labelWidth: box.width + 80, labelHeight: box.height + 40 });
   });
   it('auto-fits a comment height within its maximum and preserves a manual height', () => {
@@ -52,6 +54,42 @@ describe('annotation geometry', () => {
     expect(labelBounds(long, 600, 1200)!.height).toBe(LABEL_MAX_AUTO_HEIGHT);
     const manuallyResized = { ...long, labelHeight: 360, labelHeightManual: true };
     expect(labelBounds(manuallyResized, 600, 1200)!.height).toBe(360);
+  });
+  it('exposes eight connection ports on the card boundary and hit-tests them', () => {
+    const owner: Annotation = { ...arrow, id: 'owner', label: 'Источник', labelX: 100, labelY: 60, labelWidth: 160, labelHeight: 80 };
+    const box = labelBounds(owner, 600, 400)!;
+    const ports = cardPorts(owner, 600, 400);
+    expect(ports).toHaveLength(8);
+    expect(ports[0]).toEqual({ x: box.x, y: box.y });
+    expect(ports[3]).toEqual({ x: box.x + box.width, y: box.y + box.height / 2 });
+    expect(ports[6]).toEqual({ x: box.x, y: box.y + box.height });
+    expect(portHitTest(owner, { x: box.x, y: box.y }, 600, 400)).toBe(0);
+    expect(portHitTest(owner, { x: box.x + box.width, y: box.y + box.height }, 600, 400)).toBe(4);
+    expect(portHitTest(owner, { x: box.x + 40, y: box.y + 40 }, 600, 400)).toBe(-1);
+    expect(cardPortPoint(owner, 0.5, 0.5, 600, 400)).toEqual({ x: box.x + box.width / 2, y: box.y + box.height / 2 });
+  });
+  it('keeps child arrows attached to their owner card through move and resize', () => {
+    const owner: Annotation = { ...arrow, id: 'owner', label: 'Комментарий', labelX: 100, labelY: 80, labelWidth: 160, labelHeight: 80 };
+    const child: Annotation = { ...arrow, id: 'child', cardOwnerId: 'owner', cardPortX: 1, cardPortY: 0.5, start: { x: 0, y: 0 }, end: { x: 420, y: 260 } };
+    const box = labelBounds(owner, 600, 400)!;
+    expect(syncChildArrows([owner, child], 600, 400).find((item) => item.id === 'child')).toMatchObject({
+      start: { x: box.x + box.width, y: box.y + box.height / 2 }, end: child.end,
+    });
+    const resized = resizedLabel(movedLabel(owner, 50, 20, 600, 400), 'se', 40, 30, 600, 400);
+    const newBox = labelBounds(resized, 600, 400)!;
+    expect(syncChildArrows([resized, child], 600, 400).find((item) => item.id === 'child')).toMatchObject({
+      start: { x: newBox.x + newBox.width, y: newBox.y + newBox.height / 2 },
+    });
+  });
+  it('routes a child arrow from its port around a foreign card to the target', () => {
+    const owner: Annotation = { ...arrow, id: 'owner', label: 'Источник', labelX: 360, labelY: 120, labelWidth: 150, labelHeight: 80 };
+    const child: Annotation = { ...arrow, id: 'child', cardOwnerId: 'owner', cardPortX: 0, cardPortY: 0.5, start: { x: 0, y: 0 }, end: { x: 60, y: 250 } };
+    const obstacle: Annotation = { ...arrow, id: 'b', label: 'Препятствие', labelX: 150, labelY: 130, labelWidth: 120, labelHeight: 110 };
+    const annotations = [owner, child, obstacle];
+    const route = commentArrowRoute(child, annotations, 600, 400)!;
+    expect(route.length).toBeGreaterThan(2);
+    expect(route[0]).toEqual(arrowStart(child, annotations, 600, 400));
+    expect(route.at(-1)).toEqual(child.end);
   });
   it.each([
     [1280, 800, 1280, 800, 1],

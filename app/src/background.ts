@@ -67,6 +67,10 @@ chrome.runtime.onMessage.addListener((message: RuntimeMessage, sender, sendRespo
     });
     return true;
   }
+  if (message?.type === 'SNAPMARK_OPEN_SHORTCUTS') {
+    chrome.tabs.create({ url: 'chrome://extensions/shortcuts' }).then(() => sendResponse({ ok: true }), (error: unknown) => sendResponse({ ok: false, error: error instanceof Error ? error.message : String(error) }));
+    return true;
+  }
   if (message?.type !== 'SNAPMARK_EXPORT') return false;
   const exportMessage = message as ExportMessage;
   (async () => {

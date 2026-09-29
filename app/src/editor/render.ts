@@ -1,8 +1,6 @@
 import type { Annotation, Bounds, Point } from '../shared';
 import { UI_BLUE } from '../shared';
-import { boundsOf, commentArrowRoute, labelBounds, labelHandles, labelLayout } from './geometry';
-
-export type RenderOptions = { selectedId?: string | null; showSelection?: boolean };
+import { boundsOf, cardPorts, commentArrowRoute, LABEL_HANDLE_PADDING, LABEL_HANDLE_SIZE, labelBounds, labelLayout } from './geometry';
 
 function pathPencil(ctx: CanvasRenderingContext2D, points: Point[]): void {
   if (points.length < 2) return;
@@ -138,26 +136,90 @@ function drawSelection(ctx: CanvasRenderingContext2D, bounds: Bounds): void {
   ctx.restore();
 }
 
-function drawLabelSelection(ctx: CanvasRenderingContext2D, annotation: Annotation): void {
-  const label = labelBounds(annotation, ctx.canvas.width, ctx.canvas.height);
-  if (!label) return;
+export type RenderOptions = {
+  selectedId?: string | null;
+  showSelection?: boolean;
+  /** Annotation id whose ports should be shown in hover state (non-selected card) */
+  hoverAnnotationId?: string | null;
+  /** Port index (0-7) currently under the cursor; -1 or null = none */
+  hoverPortIndex?: number | null;
+};
+
+/**
+ * Draws the 8 connection ports on the border of a comment card.
+ *
+ * Ports whose centre falls exactly on the card boundary.  The hovered port
+ * is rendered slightly larger and with a blue stroke so it is easy to grab.
+ *
+ * @param isSelected - when true the ports are always visible;
+ *                     when false they are drawn semi-transparent (hover state)
+ */
+function drawCardPorts(ctx: CanvasRenderingContext2D, annotation: Annotation, hoverPortIndex: number | null | undefined, isSelected: boolean): void {
+  const ports = cardPorts(annotation, ctx.canvas.width, ctx.canvas.height);
+  if (!ports.length) return;
   ctx.save();
-  ctx.strokeStyle = UI_BLUE;
-  ctx.lineWidth = 1.5;
-  ctx.setLineDash([4, 3]);
-  ctx.strokeRect(label.x - 4, label.y - 4, label.width + 8, label.height + 8);
-  ctx.setLineDash([]);
-  ctx.fillStyle = UI_BLUE;
-  ctx.font = '600 10px Inter, system-ui, sans-serif';
-  ctx.fillText('Комментарий · 8 сторон — размер, центр — перенос', label.x, Math.max(12, label.y - 8));
-  for (const handle of labelHandles(annotation, ctx.canvas.width, ctx.canvas.height)) {
-    ctx.fillStyle = handle.position === 'move' ? UI_BLUE : '#fff';
+  const baseAlpha = isSelected ? 1 : 0.65;
+  for (let i = 0; i < ports.length; i += 1) {
+    const p = ports[i]!;
+    const isHovered = hoverPortIndex === i;
+    const r = isHovered ? 6 : 4;
+    ctx.globalAlpha = isHovered ? 1 : baseAlpha;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    ctx.fillStyle = isHovered ? UI_BLUE : '#fff';
+    ctx.fill();
     ctx.strokeStyle = UI_BLUE;
-    ctx.lineWidth = 1.5;
-    ctx.fillRect(handle.bounds.x, handle.bounds.y, handle.bounds.width, handle.bounds.height);
-    ctx.strokeRect(handle.bounds.x, handle.bounds.y, handle.bounds.width, handle.bounds.height);
+    ctx.lineWidth = isHovered ? 2 : 1.5;
+    ctx.stroke();
   }
   ctx.restore();
+}
+
+/**
+ * Draws the selection chrome for a comment card:
+ * – outer dashed frame 10 px outside the card with 8 square resize handles
+ * – port circles on the card boundary
+ */
+function drawLabelSelection(ctx: CanvasRenderingContext2D, annotation: Annotation, hoverPortIndex: number | null | undefined): void {
+  const label = labelBounds(annotation, ctx.canvas.width, ctx.canvas.height);
+  if (!label) return;
+
+  const pad = LABEL_HANDLE_PADDING; // gap between card edge and outer dashed frame
+  const fx = label.x - pad;
+  const fy = label.y - pad;
+  const fw = label.width + pad * 2;
+  const fh = label.height + pad * 2;
+
+  ctx.save();
+
+  // --- Outer dashed frame ---
+  ctx.strokeStyle = UI_BLUE;
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([5, 4]);
+  ctx.strokeRect(fx, fy, fw, fh);
+  ctx.setLineDash([]);
+
+  // --- 8 square resize handles centred on the outer frame ---
+  const hs = LABEL_HANDLE_SIZE;
+  const hh = hs / 2;
+  const frameHandlePositions: Array<[number, number]> = [
+    [fx, fy], [fx + fw / 2, fy], [fx + fw, fy],
+    [fx + fw, fy + fh / 2],
+    [fx + fw, fy + fh], [fx + fw / 2, fy + fh], [fx, fy + fh],
+    [fx, fy + fh / 2],
+  ];
+  for (const [hx, hy] of frameHandlePositions) {
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(hx - hh, hy - hh, hs, hs);
+    ctx.strokeStyle = UI_BLUE;
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(hx - hh, hy - hh, hs, hs);
+  }
+
+  ctx.restore();
+
+  // --- Port circles on the card boundary (always visible when selected) ---
+  drawCardPorts(ctx, annotation, hoverPortIndex, true);
 }
 
 export function drawScene(ctx: CanvasRenderingContext2D, background: HTMLCanvasElement, annotations: Annotation[], options: RenderOptions = {}): void {
@@ -168,8 +230,13 @@ export function drawScene(ctx: CanvasRenderingContext2D, background: HTMLCanvasE
     const selected = annotations.find((item) => item.id === options.selectedId);
     if (selected) {
       drawSelection(ctx, boundsOf(selected));
-      drawLabelSelection(ctx, selected);
+      drawLabelSelection(ctx, selected, options.hoverPortIndex);
     }
+  }
+  // Hover ports on non-selected cards
+  if (options.hoverAnnotationId && options.hoverAnnotationId !== options.selectedId) {
+    const hovered = annotations.find((item) => item.id === options.hoverAnnotationId);
+    if (hovered) drawCardPorts(ctx, hovered, options.hoverPortIndex, false);
   }
 }
 

@@ -1,5 +1,5 @@
 import { DEFAULT_SETTINGS, exportFilename, makeId, type Annotation, type Bounds, type Point, type SnapmarkSettings, type Tool } from '../shared';
-import { captureScale, hitTest, hitTestLabel, isDrawable, LABEL_MAX_AUTO_HEIGHT, labelAnchor, labelBounds, labelHandleAt, type LabelHandlePosition, moved, movedLabel, normalizedBounds, resizedLabel, withCardAnchor } from './geometry';
+import { captureScale, CARD_PORTS, cardPortPoint, hitTest, hitTestLabel, isDrawable, LABEL_MAX_AUTO_HEIGHT, labelAnchor, labelBounds, labelHandleAt, type LabelHandlePosition, moved, movedLabel, normalizedBounds, portHitTest, resizedLabel, syncChildArrows, withCardAnchor } from './geometry';
 import { History } from './history';
 import { icon } from './icons';
 import { commentKeyAction, historyKeyAction } from './keyboard';
@@ -8,6 +8,8 @@ import { editorCss } from './styles';
 
 type Exporter = (action: 'copy' | 'save', dataUrl: string, filename: string) => Promise<void>;
 type CaptureRequester = () => Promise<string>;
+type InlineSource = { image: HTMLImageElement; crop: Bounds; scale: { x: number; y: number } };
+type EditorSnapshot = { annotations: Annotation[]; crop?: Bounds };
 
 const toolNames: Record<Tool, string> = { select: 'Выбор', arrow: 'Стрелка', rect: 'Прямоугольник', ellipse: 'Овал', pencil: 'Карандаш', text: 'Текст' };
 
@@ -133,7 +135,7 @@ function setupInlineSelection(root: HTMLElement, settings: SnapmarkSettings, req
       const scale = captureScale(image.naturalWidth, image.naturalHeight, window.innerWidth, window.innerHeight);
       const background = cropImage(image, selected, scale.x, scale.y);
       window.removeEventListener('keydown', key, true);
-      showEditor(root, background, settings, exporter, cleanup, selected);
+      showEditor(root, background, settings, exporter, cleanup, { image, crop: selected, scale });
     } catch (error) {
       pending = false;
       capture.classList.remove('capture-pending');
@@ -200,19 +202,21 @@ function updateCaptureBackdrop(capture: HTMLElement, crop: Bounds): void {
   setRect('right', crop.x + crop.width, crop.y, window.innerWidth - crop.x - crop.width, crop.height);
 }
 
-function showEditor(root: HTMLElement, background: HTMLCanvasElement, settings: SnapmarkSettings, exporter: Exporter, cleanup: () => void, inlineCrop?: Bounds): void {
-  root.innerHTML = editorMarkup(settings, Boolean(inlineCrop));
+function showEditor(root: HTMLElement, initialBackground: HTMLCanvasElement, settings: SnapmarkSettings, exporter: Exporter, cleanup: () => void, inlineSource?: InlineSource): void {
+  root.innerHTML = editorMarkup(settings, Boolean(inlineSource));
+  let background = initialBackground;
+  let crop = inlineSource ? { ...inlineSource.crop } : undefined;
   const canvas = root.querySelector<HTMLCanvasElement>('.canvas')!;
   canvas.width = background.width;
   canvas.height = background.height;
   const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
-  if (inlineCrop) {
-    const relayout = () => positionInlineEditor(root, inlineCrop);
+  if (crop) {
+    const relayout = () => positionInlineEditor(root, crop!);
     relayout();
     window.addEventListener('resize', relayout);
     root.addEventListener('snapmark-cleanup', () => window.removeEventListener('resize', relayout), { once: true });
   }
-  const history = new History<Annotation[]>([]);
+  const history = new History<EditorSnapshot>({ annotations: [], crop: crop && { ...crop } });
   let annotations: Annotation[] = [];
   let selectedId: string | null = null;
   let currentTool: Tool = 'arrow';
@@ -225,9 +229,29 @@ function showEditor(root: HTMLElement, background: HTMLCanvasElement, settings: 
   let editingId: string | null = null;
   let commentHasManualHeight = false;
   let exporting = false;
+  let hoverPortIndex: number | null = null;
 
-  const render = () => drawScene(ctx, background, draft ? [...annotations.filter((a) => a.id !== draft!.id), draft] : annotations, { selectedId, showSelection: currentTool === 'select' });
-  const setAnnotations = (next: Annotation[], push = true) => { annotations = push ? history.push(next) : next; updateHistoryButtons(root, history); render(); };
+  const render = () => drawScene(ctx, background, draft ? [...annotations.filter((a) => a.id !== draft!.id), draft] : annotations, { selectedId, showSelection: currentTool === 'select', hoverPortIndex });
+  const applySnapshot = (snapshot: EditorSnapshot) => {
+    if (inlineSource && snapshot.crop) {
+      crop = { ...snapshot.crop };
+      background = cropImage(inlineSource.image, crop, inlineSource.scale.x, inlineSource.scale.y);
+      canvas.width = background.width; canvas.height = background.height;
+      positionInlineEditor(root, crop);
+    }
+    annotations = syncChildArrows(snapshot.annotations, canvas.width, canvas.height);
+    updateHistoryButtons(root, history); render();
+  };
+  const setAnnotations = (next: Annotation[], push = true) => {
+    const synced = syncChildArrows(next, canvas.width, canvas.height);
+    annotations = synced;
+    if (push) history.push({ annotations: synced, crop: crop && { ...crop } });
+    updateHistoryButtons(root, history); render();
+  };
+  const deleteAnnotation = (id: string) => {
+    setAnnotations(annotations.filter((annotation) => annotation.id !== id && annotation.cardOwnerId !== id));
+    selectedId = null;
+  };
   const setTool = (tool: Tool) => {
     commitComment();
     currentTool = tool;
@@ -323,14 +347,42 @@ function showEditor(root: HTMLElement, background: HTMLCanvasElement, settings: 
   };
 
   root.querySelectorAll<HTMLButtonElement>('[data-tool]').forEach((button) => button.addEventListener('click', () => setTool(button.dataset.tool as Tool)));
-  root.querySelector<HTMLButtonElement>('[data-action="undo"]')!.addEventListener('click', () => { annotations = history.undo(); selectedId = null; updateHistoryButtons(root, history); render(); });
-  root.querySelector<HTMLButtonElement>('[data-action="redo"]')!.addEventListener('click', () => { annotations = history.redo(); selectedId = null; updateHistoryButtons(root, history); render(); });
+  root.querySelector<HTMLButtonElement>('[data-action="undo"]')!.addEventListener('click', () => { applySnapshot(history.undo()); selectedId = null; });
+  root.querySelector<HTMLButtonElement>('[data-action="redo"]')!.addEventListener('click', () => { applySnapshot(history.redo()); selectedId = null; });
   root.querySelector<HTMLButtonElement>('[data-action="copy"]')!.addEventListener('click', () => void exportAction('copy'));
   root.querySelector<HTMLButtonElement>('[data-action="save"]')!.addEventListener('click', () => void exportAction('save'));
   root.querySelector<HTMLButtonElement>('[data-action="close"]')!.addEventListener('click', cleanup);
+  let cropMode = false;
+  let cropDrag: { start: Bounds; handle: string } | null = null;
+  const cropButton = root.querySelector<HTMLButtonElement>('[data-action="crop"]');
+  const setCropMode = (enabled: boolean) => {
+    cropMode = enabled;
+    cropButton?.classList.toggle('active', enabled);
+    root.querySelector<HTMLElement>('.status-main')!.textContent = enabled ? 'Кадрирование · тяните границы' : toolNames[currentTool];
+    canvas.style.cursor = enabled ? 'crosshair' : currentTool === 'select' ? 'default' : 'crosshair';
+  };
+  cropButton?.addEventListener('click', () => setCropMode(!cropMode));
+  const shiftAnnotation = (annotation: Annotation, dx: number, dy: number): Annotation => moved(annotation, dx, dy);
+  const updateCrop = (next: Bounds, push = false) => {
+    if (!inlineSource || !crop) return;
+    const old = crop;
+    const maxWidth = inlineSource.image.naturalWidth / inlineSource.scale.x;
+    const maxHeight = inlineSource.image.naturalHeight / inlineSource.scale.y;
+    const width = Math.max(24, Math.min(next.width, maxWidth)); const height = Math.max(24, Math.min(next.height, maxHeight));
+    const x = Math.max(0, Math.min(next.x, maxWidth - width)); const y = Math.max(0, Math.min(next.y, maxHeight - height));
+    crop = { x, y, width, height };
+    const dx = (old.x - x) * inlineSource.scale.x; const dy = (old.y - y) * inlineSource.scale.y;
+    annotations = annotations.map((annotation) => shiftAnnotation(annotation, dx, dy));
+    background = cropImage(inlineSource.image, crop, inlineSource.scale.x, inlineSource.scale.y);
+    canvas.width = background.width; canvas.height = background.height;
+    annotations = syncChildArrows(annotations, canvas.width, canvas.height);
+    positionInlineEditor(root, crop);
+    if (push) history.push({ annotations, crop: { ...crop } });
+    updateHistoryButtons(root, history); render();
+  };
   root.querySelector<HTMLButtonElement>('[data-action="delete"]')!.addEventListener('click', () => {
     if (!selectedId) return;
-    setAnnotations(annotations.filter((a) => a.id !== selectedId)); selectedId = null;
+    deleteAnnotation(selectedId);
   });
   root.querySelector<HTMLButtonElement>('[data-action="comment-ok"]')!.addEventListener('click', commitComment);
   const commentHandle = root.querySelector<HTMLElement>('[data-comment-drag]')!;
@@ -403,7 +455,34 @@ function showEditor(root: HTMLElement, background: HTMLCanvasElement, settings: 
 
   canvas.addEventListener('pointerdown', (event) => {
     if (event.button !== 0 || editingId) return;
+    if (cropMode && crop && inlineSource) {
+      const rect = canvas.getBoundingClientRect();
+      const x = (event.clientX - rect.left) * crop.width / rect.width;
+      const y = (event.clientY - rect.top) * crop.height / rect.height;
+      const edge = 14;
+      const handle = `${x < edge ? 'w' : x > crop.width - edge ? 'e' : ''}${y < edge ? 'n' : y > crop.height - edge ? 's' : ''}` || 'move';
+      cropDrag = { start: { ...crop }, handle };
+      canvas.setPointerCapture(event.pointerId);
+      return;
+    }
+    hoverPortIndex = null;
     const p = point(event);
+    // Dragging from a connection port of the selected comment card starts a new
+    // child arrow that points to another spot on the screenshot.
+    const portOwner = currentTool === 'select' && selectedId ? annotations.find((annotation) => annotation.id === selectedId && annotation.label?.trim()) : undefined;
+    if (portOwner) {
+      const portIndex = portHitTest(portOwner, p, canvas.width, canvas.height, 8);
+      if (portIndex >= 0) {
+        const port = CARD_PORTS[portIndex]!;
+        const start = cardPortPoint(portOwner, port.portX, port.portY, canvas.width, canvas.height) ?? p;
+        draft = { id: makeId(), tool: 'arrow', color: settings.color, width: settings.lineWidth, start, end: start, cardOwnerId: portOwner.id, cardPortX: port.portX, cardPortY: port.portY } as Annotation;
+        pointerStart = p;
+        hoverPortIndex = null;
+        canvas.setPointerCapture(event.pointerId);
+        render();
+        return;
+      }
+    }
     pointerStart = p;
     canvas.setPointerCapture(event.pointerId);
     const handleHit = [...annotations].reverse().map((annotation) => ({ annotation, handle: labelHandleAt(annotation, p, canvas.width, canvas.height) })).find(({ handle }) => handle);
@@ -437,6 +516,23 @@ function showEditor(root: HTMLElement, background: HTMLCanvasElement, settings: 
     render();
   });
   canvas.addEventListener('pointermove', (event) => {
+    if (cropDrag && inlineSource) {
+      const rect = canvas.getBoundingClientRect();
+      const current = crop!;
+      const pageX = current.x + (event.clientX - rect.left) * current.width / rect.width;
+      const pageY = current.y + (event.clientY - rect.top) * current.height / rect.height;
+      const start = cropDrag.start;
+      let next = { ...start };
+      if (cropDrag.handle === 'move') { next.x = pageX - start.width / 2; next.y = pageY - start.height / 2; }
+      else {
+        if (cropDrag.handle.includes('w')) { next.x = pageX; next.width = start.x + start.width - pageX; }
+        if (cropDrag.handle.includes('e')) next.width = pageX - start.x;
+        if (cropDrag.handle.includes('n')) { next.y = pageY; next.height = start.y + start.height - pageY; }
+        if (cropDrag.handle.includes('s')) next.height = pageY - start.y;
+      }
+      updateCrop(next);
+      return;
+    }
     if (!pointerStart) return;
     const p = point(event);
     if (resizingLabel && movingOriginal) {
@@ -452,12 +548,23 @@ function showEditor(root: HTMLElement, background: HTMLCanvasElement, settings: 
   canvas.addEventListener('pointermove', (event) => {
     if (pointerStart || editingId) return;
     const p = point(event);
+    const selectedCard = currentTool === 'select' && selectedId ? annotations.find((annotation) => annotation.id === selectedId && annotation.label?.trim()) : undefined;
+    const hitPort = selectedCard ? portHitTest(selectedCard, p, canvas.width, canvas.height, 8) : -1;
+    const portIndex = hitPort >= 0 ? hitPort : null;
+    if (portIndex !== hoverPortIndex) { hoverPortIndex = portIndex; render(); }
     const hoverHandle = [...annotations].reverse().map((annotation) => labelHandleAt(annotation, p, canvas.width, canvas.height)).find(Boolean);
     const cursorByHandle: Partial<Record<LabelHandlePosition, string>> = { nw: 'nwse-resize', se: 'nwse-resize', ne: 'nesw-resize', sw: 'nesw-resize', n: 'ns-resize', s: 'ns-resize', w: 'ew-resize', e: 'ew-resize', move: 'move' };
     const overLabel = !hoverHandle && [...annotations].some((annotation) => hitTestLabel(annotation, p, canvas.width, canvas.height));
-    canvas.style.cursor = hoverHandle ? cursorByHandle[hoverHandle] ?? 'move' : overLabel ? 'move' : currentTool === 'select' ? 'default' : 'crosshair';
+    canvas.style.cursor = portIndex != null ? 'crosshair' : hoverHandle ? cursorByHandle[hoverHandle] ?? 'move' : overLabel ? 'move' : currentTool === 'select' ? 'default' : 'crosshair';
   });
   canvas.addEventListener('pointerup', (event) => {
+    if (cropDrag) {
+      canvas.releasePointerCapture(event.pointerId);
+      cropDrag = null;
+      history.push({ annotations, crop: crop && { ...crop } });
+      updateHistoryButtons(root, history);
+      return;
+    }
     if (!pointerStart) return;
     canvas.releasePointerCapture(event.pointerId);
     pointerStart = null;
@@ -469,13 +576,26 @@ function showEditor(root: HTMLElement, background: HTMLCanvasElement, settings: 
       const finished = draft;
       draft = null;
       setAnnotations([...annotations, finished]);
-      openComment(finished);
-    } else { draft = null; selectedId = null; render(); }
+      if (finished.cardOwnerId) { selectedId = finished.id; render(); }
+      else openComment(finished);
+    } else {
+      draft = null;
+      // A child arrow starts on its card, so an aborted drag keeps the card
+      // selected instead of dropping the selection.
+      if (!selectedId || !annotations.some((annotation) => annotation.id === selectedId)) selectedId = null;
+      render();
+    }
   });
   canvas.addEventListener('dblclick', (event) => {
     const p = point(event);
     const hit = [...annotations].reverse().find((annotation) => hitTestLabel(annotation, p, canvas.width, canvas.height) || hitTest(annotation, p));
-    if (hit) { selectedId = hit.id; openComment(hit, true); }
+    if (!hit) return;
+    // Child arrows share the comment of their owner card, so double-clicking
+    // one edits that card rather than creating a second, empty comment.
+    const owner = hit.cardOwnerId ? annotations.find((annotation) => annotation.id === hit.cardOwnerId) : undefined;
+    const target = owner ?? hit;
+    selectedId = target.id;
+    openComment(target, true);
   });
 
   const textarea = root.querySelector<HTMLTextAreaElement>('.comment textarea')!;
@@ -516,10 +636,8 @@ function showEditor(root: HTMLElement, background: HTMLCanvasElement, settings: 
       // the current card first, just like the toolbar Undo button does, so the
       // next undo can reach the annotation that opened the card.
       if (editingId) commitComment();
-      annotations = historyAction === 'redo' ? history.redo() : history.undo();
+      applySnapshot(historyAction === 'redo' ? history.redo() : history.undo());
       selectedId = null;
-      updateHistoryButtons(root, history);
-      render();
       return;
     }
     if (editingId) return;
@@ -527,7 +645,7 @@ function showEditor(root: HTMLElement, background: HTMLCanvasElement, settings: 
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); void exportAction('save'); return; }
     if (event.key === 'Enter') { event.preventDefault(); void exportAction('copy'); return; }
     if (event.key === 'Escape') { event.preventDefault(); if (selectedId) { selectedId = null; render(); } else cleanup(); return; }
-    if ((event.key === 'Delete' || event.key === 'Backspace') && selectedId) { event.preventDefault(); setAnnotations(annotations.filter((a) => a.id !== selectedId)); selectedId = null; }
+    if ((event.key === 'Delete' || event.key === 'Backspace') && selectedId) { event.preventDefault(); deleteAnnotation(selectedId); }
     const shortcuts: Partial<Record<string, Tool>> = { v: 'select', a: 'arrow', r: 'rect', o: 'ellipse', p: 'pencil', t: 'text' };
     if (!event.ctrlKey && !event.metaKey && shortcuts[event.key.toLowerCase()]) setTool(shortcuts[event.key.toLowerCase()]!);
   };
@@ -540,11 +658,11 @@ function showEditor(root: HTMLElement, background: HTMLCanvasElement, settings: 
 
 function editorMarkup(settings: SnapmarkSettings, inlineMode = false): string {
   const toolButton = (tool: Tool, shortcut: string) => `<button type="button" class="ib" data-tool="${tool}" data-tooltip="${toolNames[tool]} · ${shortcut}" title="${toolNames[tool]} (${shortcut})" aria-label="${toolNames[tool]}">${icon(tool)}</button>`;
-  const actionButton = (action: string, name: 'undo' | 'redo' | 'copy' | 'save' | 'close' | 'trash', tooltip: string, extra = '') => `<button type="button" class="ib ${extra}" data-action="${action}" data-tooltip="${tooltip}" title="${tooltip}" aria-label="${tooltip}">${icon(name)}</button>`;
+  const actionButton = (action: string, name: 'undo' | 'redo' | 'copy' | 'save' | 'close' | 'trash' | 'crop', tooltip: string, extra = '') => `<button type="button" class="ib ${extra}" data-action="${action}" data-tooltip="${tooltip}" title="${tooltip}" aria-label="${tooltip}">${icon(name)}</button>`;
   const settingsMarkup = `<div class="top-settings"><span class="swatch" style="background:${settings.color}"><input data-setting="color" aria-label="Цвет аннотации" type="color" value="${settings.color}"></span><span class="value" data-color-value>${settings.color}</span><input class="range" data-setting="width" aria-label="Толщина линии" type="range" min="2" max="10" value="${settings.lineWidth}"><span class="value" data-width-value>${settings.lineWidth} px</span><label class="check" title="Заливка фигур · 12%"><input data-setting="fill" type="checkbox" ${settings.shapeFill ? 'checked' : ''}><span>Заливка</span></label></div>`;
   const masks = inlineMode ? '<div class="mask" data-mask="top"></div><div class="mask" data-mask="left"></div><div class="mask" data-mask="right"></div><div class="mask" data-mask="bottom"></div>' : '';
   return `<div class="editor ${inlineMode ? 'inline-editor' : ''}">${masks}
-    <header class="topbar"><div class="brand"><i class="brandmark"></i><span>Snapmark</span></div>${inlineMode ? settingsMarkup + '<div class="divider-v"></div>' : ''}${actionButton('undo','undo','Отменить · Ctrl+Z')}${actionButton('redo','redo','Повторить · Ctrl+Shift+Z / Ctrl+Y')}<div class="spacer"></div>${actionButton('copy','copy','Копировать PNG · Enter','primary')}${actionButton('save','save','Сохранить как… · Ctrl+S')}${actionButton('close','close','Закрыть · Esc')}</header>
+    <header class="topbar"><div class="brand"><i class="brandmark"></i><span>Snapmark</span></div>${inlineMode ? settingsMarkup + '<div class="divider-v"></div>' : ''}${inlineMode ? actionButton('crop','crop','Изменить область снимка') : ''}${actionButton('undo','undo','Отменить · Ctrl+Z')}${actionButton('redo','redo','Повторить · Ctrl+Shift+Z / Ctrl+Y')}<div class="spacer"></div>${actionButton('copy','copy','Копировать PNG · Enter','primary')}${actionButton('save','save','Сохранить как… · Ctrl+S')}${actionButton('close','close','Закрыть · Esc')}</header>
     <aside class="toolstrip">${toolButton('select','V')}${toolButton('arrow','A')}${toolButton('rect','R')}${toolButton('ellipse','O')}${toolButton('pencil','P')}${toolButton('text','T')}<div class="divider"></div>${actionButton('delete','trash','Удалить · Delete','danger')}</aside>
     <main class="stage"><div class="canvas-wrap"><canvas class="canvas" tabindex="0"></canvas></div></main>
     ${inlineMode ? '' : `<aside class="props"><h3>Стиль аннотации</h3><div class="field"><label>Цвет</label><div class="inline"><span class="swatch" style="background:${settings.color}"><input data-setting="color" type="color" value="${settings.color}"></span><span class="value" data-color-value>${settings.color}</span></div></div><div class="field"><label>Толщина</label><input class="range" data-setting="width" type="range" min="2" max="10" value="${settings.lineWidth}"><span class="value" data-width-value>${settings.lineWidth} px</span></div><div class="field"><label class="check"><input data-setting="fill" type="checkbox" ${settings.shapeFill ? 'checked' : ''}>Заливка фигур · 12%</label></div><div class="hint-card"><strong>Enter</strong> — применить комментарий<br><strong>Shift/Ctrl+Enter</strong> — новая строка<br><strong>Enter</strong> вне поля — копировать PNG</div></aside>`}
@@ -579,7 +697,7 @@ function positionInlineEditor(root: HTMLElement, crop: Bounds): void {
   Object.assign(status.style, { left: `${Math.min(Math.max(8, crop.x), viewportWidth - 110)}px`, top: `${statusTop}px` });
 }
 
-function updateHistoryButtons(root: HTMLElement, history: History<Annotation[]>): void {
+function updateHistoryButtons<T>(root: HTMLElement, history: History<T>): void {
   root.querySelector<HTMLButtonElement>('[data-action="undo"]')!.disabled = !history.canUndo;
   root.querySelector<HTMLButtonElement>('[data-action="redo"]')!.disabled = !history.canRedo;
 }
