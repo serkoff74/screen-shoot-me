@@ -1,5 +1,5 @@
 import { DEFAULT_SETTINGS, exportFilename, makeId, type Annotation, type Bounds, type Point, type SnapmarkSettings, type Tool } from '../shared';
-import { captureScale, hitTest, hitTestLabel, isDrawable, labelAnchor, labelBounds, labelHandleAt, type LabelHandlePosition, moved, movedLabel, normalizedBounds, resizedLabel } from './geometry';
+import { captureScale, hitTest, hitTestLabel, isDrawable, labelAnchor, labelBounds, labelHandleAt, type LabelHandlePosition, moved, movedLabel, normalizedBounds, resizedLabel, withCardAnchor } from './geometry';
 import { History } from './history';
 import { icon } from './icons';
 import { commentKeyAction, historyKeyAction } from './keyboard';
@@ -268,10 +268,10 @@ function showEditor(root: HTMLElement, background: HTMLCanvasElement, settings: 
     const canvasRect = canvas.getBoundingClientRect();
     const scale = canvas.width / canvasRect.width;
     const rect = popup.getBoundingClientRect();
-    const next = annotations.map((a) => a.id === editingId ? {
+    const next = annotations.map((a) => a.id === editingId ? withCardAnchor({
       ...a, label: value, labelX: (rect.left - canvasRect.left) * scale, labelY: (rect.top - canvasRect.top) * scale,
       labelWidth: rect.width * scale, labelHeight: rect.height * scale,
-    } as Annotation : a);
+    } as Annotation, canvas.width, canvas.height) : a);
     const old = annotations.find((a) => a.id === editingId);
     if (old && (old.label !== value || old.labelX !== next.find((a) => a.id === editingId)?.labelX || old.labelY !== next.find((a) => a.id === editingId)?.labelY || old.labelWidth !== next.find((a) => a.id === editingId)?.labelWidth || old.labelHeight !== next.find((a) => a.id === editingId)?.labelHeight)) setAnnotations(next);
     popup.classList.add('hidden');
