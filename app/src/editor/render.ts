@@ -1,6 +1,6 @@
 import type { Annotation, Bounds, Point } from '../shared';
 import { UI_BLUE } from '../shared';
-import { boundsOf, cardPorts, commentArrowRoute, LABEL_HANDLE_PADDING, LABEL_HANDLE_SIZE, labelBounds, labelLayout } from './geometry';
+import { boundsOf, cardPorts, commentArrowRoute, commentLeaderRoute, LABEL_HANDLE_PADDING, LABEL_HANDLE_SIZE, labelBounds, labelLayout, SHAPE_HANDLE_PADDING, shapeHandles } from './geometry';
 
 function pathPencil(ctx: CanvasRenderingContext2D, points: Point[]): void {
   if (points.length < 2) return;
@@ -84,6 +84,44 @@ function drawLabel(ctx: CanvasRenderingContext2D, annotation: Annotation): void 
   ctx.restore();
 }
 
+/**
+ * Dashed coral leader with a dashed contrast halo that ties a shape's comment
+ * card to the shape itself, bending around other comment cards.
+ */
+function drawCommentLeader(ctx: CanvasRenderingContext2D, annotation: Annotation, annotations: Annotation[]): void {
+  const route = commentLeaderRoute(annotation, annotations, ctx.canvas.width, ctx.canvas.height);
+  if (!route || route.length < 2) return;
+  const halo = contrastHalo(ctx, annotation);
+  const trace = () => {
+    ctx.beginPath();
+    ctx.moveTo(route[0]!.x, route[0]!.y);
+    if (route.length === 2) { ctx.lineTo(route[1]!.x, route[1]!.y); return; }
+    for (let index = 1; index < route.length - 1; index += 1) {
+      const current = route[index]!; const next = route[index + 1]!;
+      ctx.quadraticCurveTo(current.x, current.y, (current.x + next.x) / 2, (current.y + next.y) / 2);
+    }
+    const last = route[route.length - 1]!;
+    ctx.lineTo(last.x, last.y);
+  };
+  ctx.save();
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.setLineDash([7, 6]);
+  trace(); ctx.strokeStyle = halo; ctx.lineWidth = 5; ctx.stroke();
+  trace(); ctx.strokeStyle = annotation.color; ctx.lineWidth = 2; ctx.stroke();
+  ctx.setLineDash([]);
+  // Coral anchor dot where the leader meets the shape.
+  const anchor = route[0]!;
+  ctx.beginPath();
+  ctx.arc(anchor.x, anchor.y, 3.5, 0, Math.PI * 2);
+  ctx.fillStyle = annotation.color;
+  ctx.fill();
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = halo;
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawAnnotation(ctx: CanvasRenderingContext2D, annotation: Annotation, annotations: Annotation[]): void {
   if (annotation.tool === 'text') {
     drawLabel(ctx, annotation);
@@ -108,11 +146,16 @@ function drawAnnotation(ctx: CanvasRenderingContext2D, annotation: Annotation, a
     ctx.fill();
   }
   ctx.restore();
+  drawCommentLeader(ctx, annotation, annotations);
   drawLabel(ctx, annotation);
 }
 
-function drawSelection(ctx: CanvasRenderingContext2D, bounds: Bounds): void {
-  const pad = 5;
+function drawSelection(ctx: CanvasRenderingContext2D, annotation: Annotation): void {
+  // Text is only a comment card and an arrow is edited by dragging its tip, so
+  // neither gets a bounding-box resize frame.
+  if (annotation.tool === 'text' || annotation.tool === 'arrow') return;
+  const bounds = boundsOf(annotation);
+  const pad = SHAPE_HANDLE_PADDING;
   const x = bounds.x - pad;
   const y = bounds.y - pad;
   const w = Math.max(10, bounds.width + pad * 2);
@@ -123,13 +166,14 @@ function drawSelection(ctx: CanvasRenderingContext2D, bounds: Bounds): void {
   ctx.setLineDash([5, 4]);
   ctx.strokeRect(x, y, w, h);
   ctx.setLineDash([]);
-  const handles: Array<[number, number]> = [[x, y], [x + w, y], [x, y + h], [x + w, y + h]];
-  for (const [hx, hy] of handles) {
+  // Eight handles so the selection advertises resize in every direction.
+  for (const handle of shapeHandles(annotation)) {
+    const { x: hx, y: hy, width: hw, height: hh } = handle.bounds;
     ctx.fillStyle = '#fff';
     ctx.strokeStyle = UI_BLUE;
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.rect(hx - 4, hy - 4, 8, 8);
+    ctx.rect(hx, hy, hw, hh);
     ctx.fill();
     ctx.stroke();
   }
@@ -229,7 +273,7 @@ export function drawScene(ctx: CanvasRenderingContext2D, background: HTMLCanvasE
   if (options.showSelection && options.selectedId) {
     const selected = annotations.find((item) => item.id === options.selectedId);
     if (selected) {
-      drawSelection(ctx, boundsOf(selected));
+      drawSelection(ctx, selected);
       drawLabelSelection(ctx, selected, options.hoverPortIndex);
     }
   }

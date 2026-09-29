@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { arrowStart, boundsOf, cardAnchor, cardPortPoint, cardPorts, captureScale, commentArrowRoute, hitTest, hitTestLabel, hitTestLabelResize, LABEL_MAX_AUTO_HEIGHT, labelAnchor, labelBounds, labelHandleAt, labelHandles, labelResizeHandleBounds, moved, movedLabel, normalizedBounds, pointToSegmentDistance, portHitTest, resizedLabel, syncChildArrows, withCardAnchor, wrapLabelLines } from '../editor/geometry';
+import { arrowStart, boundsOf, cardAnchor, cardPortPoint, cardPorts, captureScale, commentArrowRoute, commentLeaderRoute, hitTest, hitTestLabel, hitTestLabelResize, LABEL_HANDLE_PADDING, LABEL_MAX_AUTO_HEIGHT, labelAnchor, labelBounds, labelFrameCursor, labelHandleAt, labelHandles, labelResizeHandleBounds, moved, movedLabel, normalizedBounds, pointToSegmentDistance, portHitTest, resizeCursorFor, resizedLabel, resizedShape, SHAPE_HANDLE_PADDING, SHAPE_HANDLE_SIZE, shapeHandles, shapeResizeCursor, syncChildArrows, withCardAnchor, wrapLabelLines } from '../editor/geometry';
 import type { Annotation } from '../shared';
 
 const arrow: Annotation = { id: 'a', tool: 'arrow', color: '#FF4D2E', width: 4, start: { x: 10, y: 20 }, end: { x: 110, y: 70 } };
@@ -90,6 +90,69 @@ describe('annotation geometry', () => {
     expect(route.length).toBeGreaterThan(2);
     expect(route[0]).toEqual(arrowStart(child, annotations, 600, 400));
     expect(route.at(-1)).toEqual(child.end);
+  });
+  it('reports a resize direction along a rectangle border and nothing in its centre', () => {
+    const box = { x: 100, y: 100, width: 200, height: 100 };
+    expect(resizeCursorFor(box, { x: 100, y: 150 })).toBe('w');
+    expect(resizeCursorFor(box, { x: 300, y: 150 })).toBe('e');
+    expect(resizeCursorFor(box, { x: 200, y: 100 })).toBe('n');
+    expect(resizeCursorFor(box, { x: 200, y: 200 })).toBe('s');
+    expect(resizeCursorFor(box, { x: 100, y: 100 })).toBe('nw');
+    expect(resizeCursorFor(box, { x: 300, y: 200 })).toBe('se');
+    expect(resizeCursorFor(box, { x: 200, y: 150 })).toBeNull();
+    expect(resizeCursorFor(box, { x: 400, y: 150 })).toBeNull();
+  });
+  it('places eight resize handles around a shape and hit-tests its frame', () => {
+    const rect: Annotation = { id: 'r', tool: 'rect', color: '#FF4D2E', width: 4, start: { x: 100, y: 100 }, end: { x: 300, y: 260 } };
+    const handles = shapeHandles(rect);
+    expect(handles).toHaveLength(8);
+    const box = boundsOf(rect);
+    const se = handles.find((handle) => handle.position === 'se')!;
+    expect(se.bounds.x).toBeCloseTo(box.x + box.width + SHAPE_HANDLE_PADDING - SHAPE_HANDLE_SIZE / 2);
+    expect(se.bounds.y).toBeCloseTo(box.y + box.height + SHAPE_HANDLE_PADDING - SHAPE_HANDLE_SIZE / 2);
+    expect(shapeResizeCursor(rect, { x: box.x + box.width, y: box.y + box.height / 2 })).toBe('e');
+    expect(shapeResizeCursor(rect, { x: box.x + box.width / 2, y: box.y + box.height / 2 })).toBeNull();
+  });
+  it('scales an arrow from a corner while keeping the opposite edge fixed', () => {
+    const line: Annotation = { id: 'line', tool: 'arrow', color: '#FF4D2E', width: 4, start: { x: 100, y: 100 }, end: { x: 200, y: 200 } };
+    expect(resizedShape(line, 'se', 100, 100)).toMatchObject({ start: { x: 100, y: 100 }, end: { x: 300, y: 300 } });
+    expect(resizedShape(line, 'nw', -50, -50)).toMatchObject({ start: { x: 50, y: 50 }, end: { x: 200, y: 200 } });
+    const flat: Annotation = { id: 'flat', tool: 'arrow', color: '#FF4D2E', width: 4, start: { x: 100, y: 100 }, end: { x: 200, y: 100 } };
+    // A horizontal arrow only stretches horizontally; the vertical drag is ignored.
+    expect(resizedShape(flat, 's', 0, 40)).toMatchObject({ start: { x: 100, y: 100 }, end: { x: 200, y: 100 } });
+    expect(resizedShape(flat, 'e', 60, 0)).toMatchObject({ start: { x: 100, y: 100 }, end: { x: 260, y: 100 } });
+  });
+  it('hit-tests a comment card frame border for resizing', () => {
+    const card: Annotation = { ...arrow, id: 'card', label: 'Комментарий', labelX: 100, labelY: 100, labelWidth: 160, labelHeight: 80 };
+    const label = labelBounds(card, 600, 400)!;
+    expect(labelFrameCursor(card, { x: label.x + label.width + LABEL_HANDLE_PADDING, y: label.y + label.height / 2 }, 600, 400)).toBe('e');
+    expect(labelFrameCursor(card, { x: label.x + label.width / 2, y: label.y + label.height / 2 }, 600, 400)).toBeNull();
+  });
+  it('ties a shape comment to the shape and routes the leader around other cards', () => {
+    const rect: Annotation = { id: 'r', tool: 'rect', color: '#FF4D2E', width: 4, start: { x: 100, y: 100 }, end: { x: 200, y: 180 }, label: 'Блок', labelX: 400, labelY: 100, labelWidth: 140, labelHeight: 70 };
+    const anchor = cardAnchor(rect, 600, 400)!;
+    const straight = commentLeaderRoute(rect, [rect], 600, 400)!;
+    expect(straight.length).toBeGreaterThanOrEqual(2);
+    expect(straight[0]).toEqual({ x: 200, y: 170 });
+    expect(straight.at(-1)).toEqual(anchor.point);
+    const obstacle: Annotation = { ...arrow, id: 'obs', label: 'Препятствие', labelX: 260, labelY: 150, labelWidth: 16, labelHeight: 40 };
+    const routed = commentLeaderRoute(rect, [rect, obstacle], 600, 400)!;
+    expect(routed.length).toBeGreaterThan(2);
+    expect(routed.at(-1)).toEqual(anchor.point);
+    // Arrows and text are their own connector, so they have no leader route.
+    expect(commentLeaderRoute({ ...arrow, label: 'Стрелка' }, [arrow], 600, 400)).toBeNull();
+  });
+  it('gives a pencil comment a leader anchored on its stroke', () => {
+    const pencil: Annotation = { id: 'p', tool: 'pencil', color: '#FF4D2E', width: 4, points: [{ x: 100, y: 300 }, { x: 200, y: 100 }, { x: 300, y: 300 }], label: 'Карандаш', labelX: 100, labelY: 60, labelWidth: 140, labelHeight: 70 };
+    const route = commentLeaderRoute(pencil, [pencil], 700, 500)!;
+    const anchor = cardAnchor(pencil, 700, 500)!;
+    expect(route.at(-1)).toEqual(anchor.point);
+    const start = route[0]!;
+    const b = boundsOf(pencil);
+    expect(start.x).toBeGreaterThanOrEqual(b.x);
+    expect(start.x).toBeLessThanOrEqual(b.x + b.width);
+    expect(start.y).toBeGreaterThanOrEqual(b.y);
+    expect(start.y).toBeLessThanOrEqual(b.y + b.height);
   });
   it.each([
     [1280, 800, 1280, 800, 1],

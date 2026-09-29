@@ -1,5 +1,5 @@
-import { DEFAULT_SETTINGS, exportFilename, makeId, type Annotation, type Bounds, type Point, type SnapmarkSettings, type Tool } from '../shared';
-import { captureScale, CARD_PORTS, cardPortPoint, hitTest, hitTestLabel, isDrawable, LABEL_MAX_AUTO_HEIGHT, labelAnchor, labelBounds, labelHandleAt, type LabelHandlePosition, moved, movedLabel, normalizedBounds, portHitTest, resizedLabel, syncChildArrows, withCardAnchor } from './geometry';
+import { DEFAULT_SETTINGS, exportFilename, makeId, type Annotation, type Bounds, type Point, type ShapeAnnotation, type SnapmarkSettings, type Tool } from '../shared';
+import { captureScale, CARD_PORTS, cardPortPoint, hitTest, hitTestLabel, isDrawable, LABEL_MAX_AUTO_HEIGHT, labelAnchor, labelBounds, labelFrameCursor, labelHandleAt, type LabelHandlePosition, moved, movedLabel, normalizedBounds, portHitTest, resizedLabel, resizedShape, shapeResizeCursor, syncChildArrows, withCardAnchor } from './geometry';
 import { History } from './history';
 import { icon } from './icons';
 import { commentKeyAction, historyKeyAction } from './keyboard';
@@ -225,6 +225,9 @@ function showEditor(root: HTMLElement, initialBackground: HTMLCanvasElement, set
   let movingOriginal: Annotation | null = null;
   let movingLabel = false;
   let resizingLabel: Exclude<LabelHandlePosition, 'move'> | null = null;
+  let resizingShape: Exclude<LabelHandlePosition, 'move'> | null = null;
+  let draggingArrowEnd = false;
+  const ARROW_ENDPOINT_RADIUS = 14;
   let commentOriginal = '';
   let editingId: string | null = null;
   let commentHasManualHeight = false;
@@ -355,11 +358,31 @@ function showEditor(root: HTMLElement, initialBackground: HTMLCanvasElement, set
   let cropMode = false;
   let cropDrag: { start: Bounds; handle: string } | null = null;
   const cropButton = root.querySelector<HTMLButtonElement>('[data-action="crop"]');
+  const CROP_EDGE = 14;
+  // Which crop side/corner the pointer is over, using the same geometry as the
+  // crop drag so the cursor can advertise the resizable edges and corners.
+  const cropHandleAt = (event: PointerEvent | MouseEvent): string => {
+    if (!crop) return '';
+    const rect = canvas.getBoundingClientRect();
+    const x = (event.clientX - rect.left) * crop.width / rect.width;
+    const y = (event.clientY - rect.top) * crop.height / rect.height;
+    const horizontal = x < CROP_EDGE ? 'w' : x > crop.width - CROP_EDGE ? 'e' : '';
+    const vertical = y < CROP_EDGE ? 'n' : y > crop.height - CROP_EDGE ? 's' : '';
+    return `${horizontal}${vertical}`;
+  };
+  const cropCursor = (handle: string): string => {
+    const cursors: Record<string, string> = { wn: 'nwse-resize', es: 'nwse-resize', ws: 'nesw-resize', en: 'nesw-resize', w: 'ew-resize', e: 'ew-resize', n: 'ns-resize', s: 'ns-resize' };
+    return cursors[handle] ?? 'move';
+  };
   const setCropMode = (enabled: boolean) => {
     cropMode = enabled;
     cropButton?.classList.toggle('active', enabled);
+    // Annotation tools are unavailable while adjusting the crop: disabling them
+    // is clearer than letting the user pick a tool that cannot be used.
+    root.querySelectorAll<HTMLButtonElement>('[data-tool]').forEach((button) => { button.disabled = enabled; });
     root.querySelector<HTMLElement>('.status-main')!.textContent = enabled ? 'Кадрирование · тяните границы' : toolNames[currentTool];
-    canvas.style.cursor = enabled ? 'crosshair' : currentTool === 'select' ? 'default' : 'crosshair';
+    canvas.style.cursor = enabled ? 'move' : currentTool === 'select' ? 'default' : 'crosshair';
+    if (enabled) { hoverPortIndex = null; selectedId = null; render(); }
   };
   cropButton?.addEventListener('click', () => setCropMode(!cropMode));
   const shiftAnnotation = (annotation: Annotation, dx: number, dy: number): Annotation => moved(annotation, dx, dy);
@@ -381,8 +404,9 @@ function showEditor(root: HTMLElement, initialBackground: HTMLCanvasElement, set
     updateHistoryButtons(root, history); render();
   };
   root.querySelector<HTMLButtonElement>('[data-action="delete"]')!.addEventListener('click', () => {
-    if (!selectedId) return;
-    deleteAnnotation(selectedId);
+    if (!annotations.length) return;
+    setAnnotations([]);
+    selectedId = null;
   });
   root.querySelector<HTMLButtonElement>('[data-action="comment-ok"]')!.addEventListener('click', commitComment);
   const commentHandle = root.querySelector<HTMLElement>('[data-comment-drag]')!;
@@ -403,6 +427,15 @@ function showEditor(root: HTMLElement, initialBackground: HTMLCanvasElement, set
     const left = Math.min(window.innerWidth - popup.offsetWidth - 8, Math.max(8, commentDrag.left + event.clientX - commentDrag.pointerX));
     const top = Math.min(window.innerHeight - popup.offsetHeight - 8, Math.max(8, commentDrag.top + event.clientY - commentDrag.pointerY));
     Object.assign(popup.style, { left: `${left}px`, top: `${top}px` });
+    // Move the card on the canvas together with the popup, otherwise a ghost
+    // of the card and its arrows is left behind at the previous position.
+    const owner = annotations.find((annotation) => annotation.id === commentDrag!.id);
+    if (owner) {
+      const canvasRect = canvas.getBoundingClientRect();
+      const scale = canvas.width / canvasRect.width;
+      draft = { ...owner, labelX: (left - canvasRect.left) * scale, labelY: (top - canvasRect.top) * scale } as Annotation;
+      render();
+    }
   });
   commentHandle.addEventListener('pointerup', (event) => {
     if (!commentDrag) return;
@@ -414,6 +447,7 @@ function showEditor(root: HTMLElement, initialBackground: HTMLCanvasElement, set
     const top = Number.parseFloat(popup.style.top);
     const id = commentDrag.id;
     commentDrag = null;
+    draft = null;
     setAnnotations(annotations.map((annotation) => annotation.id === id
       ? { ...annotation, labelX: (left - canvasRect.left) * scale, labelY: (top - canvasRect.top) * scale } as Annotation
       : annotation));
@@ -433,6 +467,15 @@ function showEditor(root: HTMLElement, initialBackground: HTMLCanvasElement, set
     const popup = root.querySelector<HTMLElement>('.comment')!;
     popup.style.width = `${Math.min(window.innerWidth - popup.getBoundingClientRect().left - 8, Math.max(200, commentResize.width + event.clientX - commentResize.pointerX))}px`;
     popup.style.height = `${Math.min(window.innerHeight - popup.getBoundingClientRect().top - 8, Math.max(96, commentResize.height + event.clientY - commentResize.pointerY))}px`;
+    // Resize the canvas card live so attached arrows re-route during the drag.
+    const owner = annotations.find((annotation) => annotation.id === commentResize!.id);
+    if (owner) {
+      const canvasRect = canvas.getBoundingClientRect();
+      const scale = canvas.width / canvasRect.width;
+      const rect = popup.getBoundingClientRect();
+      draft = { ...owner, labelWidth: rect.width * scale, labelHeight: rect.height * scale } as Annotation;
+      render();
+    }
   });
   commentResizeHandle.addEventListener('pointerup', (event) => {
     if (!commentResize) return;
@@ -443,6 +486,7 @@ function showEditor(root: HTMLElement, initialBackground: HTMLCanvasElement, set
     const rect = popup.getBoundingClientRect();
     const id = commentResize.id;
     commentResize = null;
+    draft = null;
     setAnnotations(annotations.map((annotation) => annotation.id === id
       ? { ...annotation, labelWidth: rect.width * scale, labelHeight: rect.height * scale, labelHeightManual: true } as Annotation : annotation));
   });
@@ -456,13 +500,10 @@ function showEditor(root: HTMLElement, initialBackground: HTMLCanvasElement, set
   canvas.addEventListener('pointerdown', (event) => {
     if (event.button !== 0 || editingId) return;
     if (cropMode && crop && inlineSource) {
-      const rect = canvas.getBoundingClientRect();
-      const x = (event.clientX - rect.left) * crop.width / rect.width;
-      const y = (event.clientY - rect.top) * crop.height / rect.height;
-      const edge = 14;
-      const handle = `${x < edge ? 'w' : x > crop.width - edge ? 'e' : ''}${y < edge ? 'n' : y > crop.height - edge ? 's' : ''}` || 'move';
+      const handle = cropHandleAt(event) || 'move';
       cropDrag = { start: { ...crop }, handle };
       canvas.setPointerCapture(event.pointerId);
+      canvas.style.cursor = cropCursor(handle);
       return;
     }
     hoverPortIndex = null;
@@ -475,6 +516,7 @@ function showEditor(root: HTMLElement, initialBackground: HTMLCanvasElement, set
       if (portIndex >= 0) {
         const port = CARD_PORTS[portIndex]!;
         const start = cardPortPoint(portOwner, port.portX, port.portY, canvas.width, canvas.height) ?? p;
+        movingOriginal = null; movingLabel = false; resizingLabel = null; resizingShape = null;
         draft = { id: makeId(), tool: 'arrow', color: settings.color, width: settings.lineWidth, start, end: start, cardOwnerId: portOwner.id, cardPortX: port.portX, cardPortY: port.portY } as Annotation;
         pointerStart = p;
         hoverPortIndex = null;
@@ -485,12 +527,27 @@ function showEditor(root: HTMLElement, initialBackground: HTMLCanvasElement, set
     }
     pointerStart = p;
     canvas.setPointerCapture(event.pointerId);
+    // Resize the selected comment card by grabbing anywhere on its frame border.
+    const selectedAnnotation = selectedId ? annotations.find((annotation) => annotation.id === selectedId) : undefined;
+    if (selectedAnnotation) {
+      const frameHandle = labelFrameCursor(selectedAnnotation, p, canvas.width, canvas.height);
+      if (frameHandle) { setTool('select'); movingOriginal = structuredClone(selectedAnnotation); resizingLabel = frameHandle; render(); return; }
+    }
     const handleHit = [...annotations].reverse().map((annotation) => ({ annotation, handle: labelHandleAt(annotation, p, canvas.width, canvas.height) })).find(({ handle }) => handle);
     if (handleHit?.handle === 'move') {
       setTool('select'); selectedId = handleHit.annotation.id; movingOriginal = structuredClone(handleHit.annotation); movingLabel = true; render(); return;
     }
     if (handleHit?.handle) {
       setTool('select'); selectedId = handleHit.annotation.id; movingOriginal = structuredClone(handleHit.annotation); resizingLabel = handleHit.handle; render(); return;
+    }
+    // Resize the selected shape (arrow/rect/ellipse) from its frame border.
+    const shapeHandle = selectedAnnotation ? shapeResizeCursor(selectedAnnotation, p) : null;
+    if (selectedAnnotation && shapeHandle) {
+      setTool('select');
+      movingOriginal = structuredClone(selectedAnnotation);
+      resizingShape = shapeHandle;
+      render();
+      return;
     }
     const labelHit = [...annotations].reverse().find((annotation) => hitTestLabel(annotation, p, canvas.width, canvas.height));
     if (labelHit) {
@@ -505,6 +562,9 @@ function showEditor(root: HTMLElement, initialBackground: HTMLCanvasElement, set
       const hit = [...annotations].reverse().find((annotation) => hitTest(annotation, p));
       selectedId = hit?.id ?? null;
       movingOriginal = hit ? structuredClone(hit) : null;
+      // Grabbing the arrow tip moves only that endpoint; anywhere else moves
+      // the whole arrow.
+      draggingArrowEnd = Boolean(hit && hit.tool === 'arrow' && Math.hypot(p.x - hit.end.x, p.y - hit.end.y) <= ARROW_ENDPOINT_RADIUS);
       render();
       return;
     }
@@ -537,25 +597,52 @@ function showEditor(root: HTMLElement, initialBackground: HTMLCanvasElement, set
     const p = point(event);
     if (resizingLabel && movingOriginal) {
       draft = resizedLabel(movingOriginal, resizingLabel, p.x - pointerStart.x, p.y - pointerStart.y, canvas.width, canvas.height);
+    } else if (resizingShape && movingOriginal) {
+      draft = resizedShape(movingOriginal, resizingShape, p.x - pointerStart.x, p.y - pointerStart.y);
     } else if (movingLabel && movingOriginal) {
       draft = movedLabel(movingOriginal, p.x - pointerStart.x, p.y - pointerStart.y, canvas.width, canvas.height);
     } else if (currentTool === 'select' && selectedId && movingOriginal) {
-      draft = moved(movingOriginal, p.x - pointerStart.x, p.y - pointerStart.y);
+      const dx = p.x - pointerStart.x;
+      const dy = p.y - pointerStart.y;
+      // The arrow tip can be dragged on its own; a child arrow's tail is
+      // anchored to its card port, so its tip is always the movable end.
+      const onlyEnd = draggingArrowEnd || (movingOriginal.tool === 'arrow' && Boolean(movingOriginal.cardOwnerId));
+      draft = onlyEnd && movingOriginal.tool === 'arrow'
+        ? { ...movingOriginal, end: { x: movingOriginal.end.x + dx, y: movingOriginal.end.y + dy } } as Annotation
+        : moved(movingOriginal, dx, dy);
     } else if (draft?.tool === 'pencil') draft = { ...draft, points: [...draft.points, p] };
     else if (draft) draft = { ...draft, end: p } as Annotation;
     render();
   });
   canvas.addEventListener('pointermove', (event) => {
     if (pointerStart || editingId) return;
+    // In crop mode the cursor describes the crop edges, not the annotations.
+    if (cropMode && crop && inlineSource) {
+      canvas.style.cursor = cropCursor(cropHandleAt(event));
+      return;
+    }
     const p = point(event);
     const selectedCard = currentTool === 'select' && selectedId ? annotations.find((annotation) => annotation.id === selectedId && annotation.label?.trim()) : undefined;
     const hitPort = selectedCard ? portHitTest(selectedCard, p, canvas.width, canvas.height, 8) : -1;
     const portIndex = hitPort >= 0 ? hitPort : null;
     if (portIndex !== hoverPortIndex) { hoverPortIndex = portIndex; render(); }
-    const hoverHandle = [...annotations].reverse().map((annotation) => labelHandleAt(annotation, p, canvas.width, canvas.height)).find(Boolean);
     const cursorByHandle: Partial<Record<LabelHandlePosition, string>> = { nw: 'nwse-resize', se: 'nwse-resize', ne: 'nesw-resize', sw: 'nesw-resize', n: 'ns-resize', s: 'ns-resize', w: 'ew-resize', e: 'ew-resize', move: 'move' };
-    const overLabel = !hoverHandle && [...annotations].some((annotation) => hitTestLabel(annotation, p, canvas.width, canvas.height));
-    canvas.style.cursor = portIndex != null ? 'crosshair' : hoverHandle ? cursorByHandle[hoverHandle] ?? 'move' : overLabel ? 'move' : currentTool === 'select' ? 'default' : 'crosshair';
+    // The selected object's whole frame border reacts, so it is obvious where
+    // and in which direction it can be resized.
+    const selectedAnnotation = selectedId ? annotations.find((annotation) => annotation.id === selectedId) : undefined;
+    const resizeHandle = selectedAnnotation
+      ? (labelFrameCursor(selectedAnnotation, p, canvas.width, canvas.height) ?? shapeResizeCursor(selectedAnnotation, p))
+      : null;
+    const overLabel = !resizeHandle && [...annotations].some((annotation) => hitTestLabel(annotation, p, canvas.width, canvas.height));
+    // An arrow tip has no handle; the cursor alone advertises that it can be
+    // dragged to move the endpoint.
+    const hoverArrow = [...annotations].reverse().find((annotation): annotation is ShapeAnnotation => annotation.tool === 'arrow' && hitTest(annotation, p));
+    const overArrowEnd = Boolean(hoverArrow && Math.hypot(p.x - hoverArrow.end.x, p.y - hoverArrow.end.y) <= ARROW_ENDPOINT_RADIUS);
+    // A draggable annotation (including arrows) shows the hand cursor so it is
+    // clear that it can be grabbed and moved.
+    const overAnnotation = !resizeHandle && !overLabel && !overArrowEnd && currentTool === 'select'
+      && [...annotations].some((annotation) => hitTest(annotation, p));
+    canvas.style.cursor = portIndex != null ? 'pointer' : resizeHandle ? cursorByHandle[resizeHandle] ?? 'move' : overLabel ? 'move' : overArrowEnd ? 'move' : overAnnotation ? 'grab' : currentTool === 'select' ? 'default' : 'crosshair';
   });
   canvas.addEventListener('pointerup', (event) => {
     if (cropDrag) {
@@ -568,9 +655,16 @@ function showEditor(root: HTMLElement, initialBackground: HTMLCanvasElement, set
     if (!pointerStart) return;
     canvas.releasePointerCapture(event.pointerId);
     pointerStart = null;
-    if (currentTool === 'select' || movingLabel || resizingLabel) {
-      if (draft && movingOriginal) setAnnotations(annotations.map((a) => a.id === draft!.id ? draft! : a));
-      draft = null; movingOriginal = null; movingLabel = false; resizingLabel = null; return;
+    // Commit an in-progress move/resize of an existing annotation. A newly
+    // drawn annotation (including a child arrow pulled from a card port) has no
+    // `movingOriginal` and must fall through to be added below.
+    if (movingOriginal && draft) {
+      setAnnotations(annotations.map((a) => a.id === draft!.id ? draft! : a));
+      draft = null; movingOriginal = null; movingLabel = false; resizingLabel = null; resizingShape = null; draggingArrowEnd = false; return;
+    }
+    if (!draft) {
+      movingOriginal = null; movingLabel = false; resizingLabel = null; resizingShape = null; draggingArrowEnd = false;
+      if (currentTool === 'select') return;
     }
     if (draft && isDrawable(draft)) {
       const finished = draft;
@@ -642,12 +736,17 @@ function showEditor(root: HTMLElement, initialBackground: HTMLCanvasElement, set
     }
     if (editingId) return;
     event.stopPropagation();
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); void exportAction('save'); return; }
+    if ((event.ctrlKey || event.metaKey) && (event.code === 'KeyS' || event.key.toLowerCase() === 's')) { event.preventDefault(); void exportAction('save'); return; }
     if (event.key === 'Enter') { event.preventDefault(); void exportAction('copy'); return; }
-    if (event.key === 'Escape') { event.preventDefault(); if (selectedId) { selectedId = null; render(); } else cleanup(); return; }
-    if ((event.key === 'Delete' || event.key === 'Backspace') && selectedId) { event.preventDefault(); deleteAnnotation(selectedId); }
-    const shortcuts: Partial<Record<string, Tool>> = { v: 'select', a: 'arrow', r: 'rect', o: 'ellipse', p: 'pencil', t: 'text' };
-    if (!event.ctrlKey && !event.metaKey && shortcuts[event.key.toLowerCase()]) setTool(shortcuts[event.key.toLowerCase()]!);
+    if (event.key === 'Escape') { event.preventDefault(); if (cropMode) { setCropMode(false); return; } if (selectedId) { selectedId = null; render(); } else cleanup(); return; }
+    if ((event.key === 'Delete' || event.key === 'Backspace') && selectedId && !cropMode) { event.preventDefault(); deleteAnnotation(selectedId); }
+    // Tool hotkeys match the physical key so they work on non-Latin layouts too.
+    const toolShortcuts: Partial<Record<string, Tool>> = { KeyV: 'select', KeyA: 'arrow', KeyR: 'rect', KeyO: 'ellipse', KeyP: 'pencil', KeyT: 'text' };
+    const letterShortcuts: Partial<Record<string, Tool>> = { v: 'select', a: 'arrow', r: 'rect', o: 'ellipse', p: 'pencil', t: 'text' };
+    if (!cropMode && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      const tool = toolShortcuts[event.code] ?? letterShortcuts[event.key.toLowerCase()];
+      if (tool) setTool(tool);
+    }
   };
   window.addEventListener('keydown', keydown, true);
   root.addEventListener('snapmark-cleanup', () => window.removeEventListener('keydown', keydown, true));
@@ -663,7 +762,7 @@ function editorMarkup(settings: SnapmarkSettings, inlineMode = false): string {
   const masks = inlineMode ? '<div class="mask" data-mask="top"></div><div class="mask" data-mask="left"></div><div class="mask" data-mask="right"></div><div class="mask" data-mask="bottom"></div>' : '';
   return `<div class="editor ${inlineMode ? 'inline-editor' : ''}">${masks}
     <header class="topbar"><div class="brand"><i class="brandmark"></i><span>Snapmark</span></div>${inlineMode ? settingsMarkup + '<div class="divider-v"></div>' : ''}${inlineMode ? actionButton('crop','crop','Изменить область снимка') : ''}${actionButton('undo','undo','Отменить · Ctrl+Z')}${actionButton('redo','redo','Повторить · Ctrl+Shift+Z / Ctrl+Y')}<div class="spacer"></div>${actionButton('copy','copy','Копировать PNG · Enter','primary')}${actionButton('save','save','Сохранить как… · Ctrl+S')}${actionButton('close','close','Закрыть · Esc')}</header>
-    <aside class="toolstrip">${toolButton('select','V')}${toolButton('arrow','A')}${toolButton('rect','R')}${toolButton('ellipse','O')}${toolButton('pencil','P')}${toolButton('text','T')}<div class="divider"></div>${actionButton('delete','trash','Удалить · Delete','danger')}</aside>
+    <aside class="toolstrip">${toolButton('select','V')}${toolButton('arrow','A')}${toolButton('rect','R')}${toolButton('ellipse','O')}${toolButton('pencil','P')}${toolButton('text','T')}<div class="divider"></div>${actionButton('delete','trash','Очистить все','danger')}</aside>
     <main class="stage"><div class="canvas-wrap"><canvas class="canvas" tabindex="0"></canvas></div></main>
     ${inlineMode ? '' : `<aside class="props"><h3>Стиль аннотации</h3><div class="field"><label>Цвет</label><div class="inline"><span class="swatch" style="background:${settings.color}"><input data-setting="color" type="color" value="${settings.color}"></span><span class="value" data-color-value>${settings.color}</span></div></div><div class="field"><label>Толщина</label><input class="range" data-setting="width" type="range" min="2" max="10" value="${settings.lineWidth}"><span class="value" data-width-value>${settings.lineWidth} px</span></div><div class="field"><label class="check"><input data-setting="fill" type="checkbox" ${settings.shapeFill ? 'checked' : ''}>Заливка фигур · 12%</label></div><div class="hint-card"><strong>Enter</strong> — применить комментарий<br><strong>Shift/Ctrl+Enter</strong> — новая строка<br><strong>Enter</strong> вне поля — копировать PNG</div></aside>`}
     <footer class="status"><span class="status-main">Стрелка</span><span class="push">Двойной клик — изменить подпись · Esc — отмена/закрыть</span></footer>

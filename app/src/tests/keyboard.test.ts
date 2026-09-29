@@ -21,4 +21,11 @@ describe('comment keyboard contract', () => {
     expect(historyKeyAction({ key: 'z', ctrlKey: true, metaKey: false, shiftKey: true })).toBe('redo');
     expect(historyKeyAction({ key: 'y', ctrlKey: false, metaKey: true, shiftKey: false })).toBe('redo');
   });
+
+  it('matches the physical key so history works on a non-Latin layout', () => {
+    expect(historyKeyAction({ key: 'я', code: 'KeyZ', ctrlKey: true, metaKey: false, shiftKey: false })).toBe('undo');
+    expect(historyKeyAction({ key: 'Я', code: 'KeyZ', ctrlKey: true, metaKey: false, shiftKey: true })).toBe('redo');
+    expect(historyKeyAction({ key: 'н', code: 'KeyY', ctrlKey: true, metaKey: false, shiftKey: false })).toBe('redo');
+    expect(historyKeyAction({ key: 'я', code: 'KeyZ', ctrlKey: false, metaKey: false, shiftKey: false })).toBe('ignore');
+  });
 });

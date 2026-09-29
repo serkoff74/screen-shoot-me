@@ -7,6 +7,10 @@ export const LABEL_MAX_AUTO_HEIGHT = 240;
 export const LABEL_HANDLE_PADDING = 10;
 /** Side length of a square resize handle. */
 export const LABEL_HANDLE_SIZE = 9;
+/** Distance between a shape's bounds and its resize-handle frame. */
+export const SHAPE_HANDLE_PADDING = 6;
+/** Side length of a shape resize handle. */
+export const SHAPE_HANDLE_SIZE = 8;
 const LABEL_HORIZONTAL_PADDING = 22;
 const LABEL_VERTICAL_PADDING = 14;
 const LABEL_LINE_HEIGHT = 20;
@@ -157,24 +161,12 @@ export function arrowStart(annotation: Annotation, annotations: Annotation[], ca
   return annotation.start;
 }
 
-/** Returns a short visibility route around other comment cards and their safe area. */
-export function commentArrowRoute(annotation: Annotation, annotations: Annotation[], canvasWidth: number, canvasHeight: number, padding = 16): Point[] | null {
-  if (annotation.tool !== 'arrow') return null;
-  const ownerId = annotation.cardOwnerId;
-  let start: Point | null;
-  let excludedId = annotation.id;
-  if (ownerId) {
-    // The owner card is where the arrow leaves from, so it is not an obstacle.
-    start = arrowStart(annotation, annotations, canvasWidth, canvasHeight);
-    excludedId = ownerId;
-  } else {
-    if (!annotation.label?.trim()) return null;
-    start = cardAnchor(annotation, canvasWidth, canvasHeight)?.point ?? null;
-  }
-  if (!start) return null;
-  const obstacles = annotations.filter((item) => item.id !== annotation.id && item.id !== excludedId && item.label?.trim())
-    .map((item) => labelBounds(item, canvasWidth, canvasHeight)).filter((item): item is Bounds => Boolean(item)).map((item) => expanded(item, padding));
-  const nodes: Point[] = [start, annotation.end];
+/**
+ * Shortest route between two points that does not cross any obstacle box. The
+ * boxes are treated as their expanded corners, so the path bends around them.
+ */
+function routeAround(start: Point, end: Point, obstacles: Bounds[]): Point[] {
+  const nodes: Point[] = [start, end];
   const clearance = 2;
   obstacles.forEach((box) => nodes.push(
     { x: box.x - clearance, y: box.y - clearance }, { x: box.x + box.width + clearance, y: box.y - clearance },
@@ -193,10 +185,94 @@ export function commentArrowRoute(annotation: Annotation, annotations: Annotatio
       if (candidate < distances[next]!) { distances[next] = candidate; previous[next] = current; }
     }
   }
-  if (!Number.isFinite(distances[1])) return [start, annotation.end];
+  if (!Number.isFinite(distances[1])) return [start, end];
   const route: Point[] = [];
   for (let cursor = 1; cursor >= 0; cursor = previous[cursor]!) { route.unshift(nodes[cursor]!); if (cursor === 0) break; }
   return route;
+}
+
+function cardObstacles(annotation: Annotation, annotations: Annotation[], canvasWidth: number, canvasHeight: number, padding: number, excludeId = annotation.id): Bounds[] {
+  return annotations.filter((item) => item.id !== annotation.id && item.id !== excludeId && item.label?.trim())
+    .map((item) => labelBounds(item, canvasWidth, canvasHeight)).filter((item): item is Bounds => Boolean(item)).map((item) => expanded(item, padding));
+}
+
+/** Returns a short visibility route around other comment cards and their safe area. */
+export function commentArrowRoute(annotation: Annotation, annotations: Annotation[], canvasWidth: number, canvasHeight: number, padding = 16): Point[] | null {
+  if (annotation.tool !== 'arrow') return null;
+  const ownerId = annotation.cardOwnerId;
+  let start: Point | null;
+  let excludedId = annotation.id;
+  if (ownerId) {
+    // The owner card is where the arrow leaves from, so it is not an obstacle.
+    start = arrowStart(annotation, annotations, canvasWidth, canvasHeight);
+    excludedId = ownerId;
+  } else {
+    if (!annotation.label?.trim()) return null;
+    start = cardAnchor(annotation, canvasWidth, canvasHeight)?.point ?? null;
+  }
+  if (!start) return null;
+  return routeAround(start, annotation.end, cardObstacles(annotation, annotations, canvasWidth, canvasHeight, padding, excludedId));
+}
+
+/** Closest point on (or inside projected to) a rectangle's border. */
+function closestPointOnBounds(bounds: Bounds, point: Point): Point {
+  const clampedX = Math.max(bounds.x, Math.min(point.x, bounds.x + bounds.width));
+  const clampedY = Math.max(bounds.y, Math.min(point.y, bounds.y + bounds.height));
+  if (clampedX !== point.x || clampedY !== point.y) return { x: clampedX, y: clampedY };
+  const options: Array<[number, Point]> = [
+    [Math.abs(point.x - bounds.x), { x: bounds.x, y: point.y }],
+    [Math.abs(point.x - (bounds.x + bounds.width)), { x: bounds.x + bounds.width, y: point.y }],
+    [Math.abs(point.y - bounds.y), { x: point.x, y: bounds.y }],
+    [Math.abs(point.y - (bounds.y + bounds.height)), { x: point.x, y: bounds.y + bounds.height }],
+  ];
+  return options.reduce((best, item) => item[0] < best[0] ? item : best)[1];
+}
+
+function nearestPointOnSegment(point: Point, a: Point, b: Point): Point {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  if (dx === 0 && dy === 0) return { x: a.x, y: a.y };
+  const t = Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / (dx * dx + dy * dy)));
+  return { x: a.x + t * dx, y: a.y + t * dy };
+}
+
+/** The point on a shape where its comment leader attaches. */
+function shapeAnchorPoint(annotation: Annotation, point: Point): Point {
+  const b = boundsOf(annotation);
+  if (annotation.tool === 'ellipse') {
+    const cx = b.x + b.width / 2;
+    const cy = b.y + b.height / 2;
+    const rx = Math.max(1, b.width / 2);
+    const ry = Math.max(1, b.height / 2);
+    const angle = Math.atan2(point.y - cy, point.x - cx);
+    return { x: cx + rx * Math.cos(angle), y: cy + ry * Math.sin(angle) };
+  }
+  if (annotation.tool === 'pencil') {
+    // Anchor to the closest point on the stroke rather than its bounding box.
+    let best = annotation.points[0] ?? point;
+    let bestDistance = Infinity;
+    for (let index = 1; index < annotation.points.length; index += 1) {
+      const candidate = nearestPointOnSegment(point, annotation.points[index - 1]!, annotation.points[index]!);
+      const distance = Math.hypot(candidate.x - point.x, candidate.y - point.y);
+      if (distance < bestDistance) { bestDistance = distance; best = candidate; }
+    }
+    return { x: best.x, y: best.y };
+  }
+  return closestPointOnBounds(b, point);
+}
+
+/**
+ * Route of the dashed leader that ties a shape's comment card to the shape. It
+ * avoids other comment cards the same way arrow routes do. Arrows are their own
+ * connector and text is a card, so both return null.
+ */
+export function commentLeaderRoute(annotation: Annotation, annotations: Annotation[], canvasWidth: number, canvasHeight: number, padding = 16): Point[] | null {
+  if (annotation.tool !== 'rect' && annotation.tool !== 'ellipse' && annotation.tool !== 'pencil') return null;
+  if (!annotation.label?.trim()) return null;
+  const anchor = cardAnchor(annotation, canvasWidth, canvasHeight);
+  if (!anchor) return null;
+  const target = shapeAnchorPoint(annotation, anchor.point);
+  return routeAround(target, anchor.point, cardObstacles(annotation, annotations, canvasWidth, canvasHeight, padding));
 }
 
 export function hitTestLabel(annotation: Annotation, point: Point, canvasWidth: number, canvasHeight: number, tolerance = 5): boolean {
@@ -310,6 +386,112 @@ export function resizedLabel(annotation: Annotation, handle: Exclude<LabelHandle
 export function isDrawable(annotation: Annotation): boolean {
   const b = boundsOf(annotation);
   return annotation.tool === 'pencil' ? annotation.points.length > 1 : annotation.tool === 'text' || b.width + b.height >= 8;
+}
+
+// ---------------------------------------------------------------------------
+// Shape resize geometry
+// ---------------------------------------------------------------------------
+
+export type ResizeDirection = Exclude<LabelHandlePosition, 'move'>;
+
+/**
+ * Returns the resize direction the point is hovering over the border of a
+ * rectangle, or null when it is not near any edge or corner. The whole border
+ * band reacts (not just the small handles), so the resize affordance is easy to
+ * discover.
+ */
+export function resizeCursorFor(bounds: Bounds, point: Point, tolerance = 6): ResizeDirection | null {
+  const { x, y, width, height } = bounds;
+  if (point.x < x - tolerance || point.x > x + width + tolerance) return null;
+  if (point.y < y - tolerance || point.y > y + height + tolerance) return null;
+  const left = Math.abs(point.x - x) <= tolerance;
+  const right = Math.abs(point.x - (x + width)) <= tolerance;
+  const top = Math.abs(point.y - y) <= tolerance;
+  const bottom = Math.abs(point.y - (y + height)) <= tolerance;
+  if (top && left) return 'nw';
+  if (top && right) return 'ne';
+  if (bottom && left) return 'sw';
+  if (bottom && right) return 'se';
+  if (left) return 'w';
+  if (right) return 'e';
+  if (top) return 'n';
+  if (bottom) return 's';
+  return null;
+}
+
+/** Hover test for a comment card's resize frame (handles and border). */
+export function labelFrameCursor(annotation: Annotation, point: Point, canvasWidth: number, canvasHeight: number, tolerance = 7): ResizeDirection | null {
+  const label = labelBounds(annotation, canvasWidth, canvasHeight);
+  if (!label) return null;
+  return resizeCursorFor({
+    x: label.x - LABEL_HANDLE_PADDING,
+    y: label.y - LABEL_HANDLE_PADDING,
+    width: label.width + LABEL_HANDLE_PADDING * 2,
+    height: label.height + LABEL_HANDLE_PADDING * 2,
+  }, point, tolerance);
+}
+
+/** Eight resize handles on the frame around a shape's bounds. */
+export function shapeHandles(annotation: Annotation): LabelHandle[] {
+  const b = boundsOf(annotation);
+  const x = b.x - SHAPE_HANDLE_PADDING;
+  const y = b.y - SHAPE_HANDLE_PADDING;
+  const right = b.x + b.width + SHAPE_HANDLE_PADDING;
+  const bottom = b.y + b.height + SHAPE_HANDLE_PADDING;
+  const middleX = (x + right) / 2;
+  const middleY = (y + bottom) / 2;
+  const points: Array<[ResizeDirection, number, number]> = [
+    ['nw', x, y], ['n', middleX, y], ['ne', right, y],
+    ['w', x, middleY], ['e', right, middleY],
+    ['sw', x, bottom], ['s', middleX, bottom], ['se', right, bottom],
+  ];
+  const half = SHAPE_HANDLE_SIZE / 2;
+  return points.map(([position, handleX, handleY]) => ({ position, bounds: { x: handleX - half, y: handleY - half, width: SHAPE_HANDLE_SIZE, height: SHAPE_HANDLE_SIZE } }));
+}
+
+/** Hover test for a selected shape's resize frame (handles and border). */
+export function shapeResizeCursor(annotation: Annotation, point: Point, tolerance = 7): ResizeDirection | null {
+  if (annotation.tool === 'pencil' || annotation.tool === 'text' || annotation.tool === 'arrow') return null;
+  const b = boundsOf(annotation);
+  const width = b.width + SHAPE_HANDLE_PADDING * 2;
+  const height = b.height + SHAPE_HANDLE_PADDING * 2;
+  // Thin shapes (e.g. a nearly flat arrow) must not turn their whole body into
+  // a resize zone, otherwise the shape could not be grabbed to move.
+  const band = Math.max(3, Math.min(tolerance, Math.min(width, height) / 3));
+  return resizeCursorFor({ x: b.x - SHAPE_HANDLE_PADDING, y: b.y - SHAPE_HANDLE_PADDING, width, height }, point, band);
+}
+
+/**
+ * Resizes an arrow, rectangle or ellipse by dragging one of its frame edges or
+ * corners. The opposite edge stays put and the endpoints are remapped
+ * proportionally, so the shape scales in every direction.
+ */
+export function resizedShape(annotation: Annotation, handle: ResizeDirection, dx: number, dy: number): Annotation {
+  if (annotation.tool !== 'arrow' && annotation.tool !== 'rect' && annotation.tool !== 'ellipse') return annotation;
+  const b = boundsOf(annotation);
+  const isLeft = handle.includes('w');
+  const isRight = handle.includes('e');
+  const isTop = handle.includes('n');
+  const isBottom = handle.includes('s');
+  const min = 8;
+  // A flat arrow only resizes along the axis it actually spans.
+  const allowX = !(annotation.tool === 'arrow' && b.width === 0);
+  const allowY = !(annotation.tool === 'arrow' && b.height === 0);
+  let x = b.x;
+  let y = b.y;
+  let width = b.width;
+  let height = b.height;
+  if (allowX && isLeft) { width = Math.max(min, b.width - dx); x = b.x + b.width - width; }
+  else if (allowX && isRight) width = Math.max(min, b.width + dx);
+  if (allowY && isTop) { height = Math.max(min, b.height - dy); y = b.y + b.height - height; }
+  else if (allowY && isBottom) height = Math.max(min, b.height + dy);
+  const mapX = (px: number) => (b.width === 0 ? x : x + ((px - b.x) / b.width) * width);
+  const mapY = (py: number) => (b.height === 0 ? y : y + ((py - b.y) / b.height) * height);
+  return {
+    ...annotation,
+    start: { x: mapX(annotation.start.x), y: mapY(annotation.start.y) },
+    end: { x: mapX(annotation.end.x), y: mapY(annotation.end.y) },
+  } as Annotation;
 }
 
 // ---------------------------------------------------------------------------
