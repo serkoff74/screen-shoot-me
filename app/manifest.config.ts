@@ -24,10 +24,7 @@ export default defineManifest({
   },
   commands: {
     'capture-screenshot': {
-      suggested_key: {
-        default: 'Ctrl+Insert',
-        mac: 'Command+Shift+S',
-      },
+      suggested_key: { default: 'Alt+Insert' },
       description: 'Сделать снимок области',
     },
   },

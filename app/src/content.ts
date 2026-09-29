@@ -1,5 +1,5 @@
 import { mountInlineSnapmark, mountSnapmark } from './editor/editor';
-import { isPrintScreenKey } from './editor/keyboard';
+import { isLaunchShortcut } from './editor/keyboard';
 import { readSettings, type BeginSelectionMessage, type CaptureRegionResponse, type StartMessage } from './shared';
 
 let cleanup: (() => void) | null = null;
@@ -34,11 +34,15 @@ chrome.runtime.onMessage.addListener((message: StartMessage | BeginSelectionMess
   return true;
 });
 
-// Best-effort `PrintScreen`: the Chrome commands API cannot bind this key and
-// the desktop environment usually grabs it first, so it only fires when the key
+// Best-effort `Ctrl+PrintScreen`: the Chrome commands API cannot bind this key and
+// the desktop environment may grab it first, so it only fires when the key
 // actually reaches the page (e.g. after the system screenshot shortcut is freed).
-window.addEventListener('keydown', (event) => {
-  if (cleanup || mounting || !isPrintScreenKey(event)) return;
+// Both keydown and keyup are handled because `PrintScreen` frequently reports only
+// keyup; `mounting`/`cleanup` make a double event harmless.
+const handleLaunch = (event: KeyboardEvent) => {
+  if (cleanup || mounting || !isLaunchShortcut(event)) return;
   event.preventDefault();
   void mountInline().catch(() => { /* overlay or capture unavailable */ });
-}, true);
+};
+window.addEventListener('keydown', handleLaunch, true);
+window.addEventListener('keyup', handleLaunch, true);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { arrowStart, boundsOf, cardAnchor, cardPortPoint, cardPorts, captureScale, commentArrowRoute, commentLeaderRoute, hitTest, hitTestLabel, hitTestLabelResize, LABEL_HANDLE_PADDING, LABEL_MAX_AUTO_HEIGHT, labelAnchor, labelBounds, labelFrameCursor, labelHandleAt, labelHandles, labelResizeHandleBounds, moved, movedLabel, normalizedBounds, pointToSegmentDistance, portHitTest, resizeCursorFor, resizedLabel, resizedShape, SHAPE_HANDLE_PADDING, SHAPE_HANDLE_SIZE, shapeHandles, shapeResizeCursor, syncChildArrows, withCardAnchor, wrapLabelLines } from '../editor/geometry';
+import { boundsOf, cardAnchor, cardPortPoint, cardPorts, captureScale, commentArrowRoute, commentLeaderRoute, hitTest, hitTestLabel, hitTestLabelResize, LABEL_HANDLE_PADDING, LABEL_MAX_AUTO_HEIGHT, labelAnchor, labelBounds, labelFrameCursor, labelHandleAt, labelHandles, labelResizeHandleBounds, moved, movedLabel, normalizedBounds, pointToSegmentDistance, portHitTest, resizeCursorFor, resizedLabel, resizedShape, SHAPE_HANDLE_PADDING, SHAPE_HANDLE_SIZE, shapeHandles, shapeResizeCursor, syncChildArrows, withCardAnchor, wrapLabelLines } from '../editor/geometry';
 import type { Annotation } from '../shared';
 
 const arrow: Annotation = { id: 'a', tool: 'arrow', color: '#FF4D2E', width: 4, start: { x: 10, y: 20 }, end: { x: 110, y: 70 } };
@@ -32,6 +32,51 @@ describe('annotation geometry', () => {
     const route = commentArrowRoute(source, [source, obstacle], 500, 300)!;
     expect(route.length).toBeGreaterThan(2);
     expect(route.at(-1)).toEqual(source.end);
+  });
+  it('routes a comment arrow around a rectangle annotation without a comment', () => {
+    const line: Annotation = { id: 'a', tool: 'arrow', color: '#FF4D2E', width: 4, label: 'Комментарий', labelX: 500, labelY: 40, labelWidth: 150, labelHeight: 70, labelAnchorSide: 'left' as const, labelAnchorRatio: 0.5, start: { x: 0, y: 0 }, end: { x: 120, y: 250 } };
+    const rect: Annotation = { id: 'r', tool: 'rect', color: '#FF4D2E', width: 4, start: { x: 150, y: 100 }, end: { x: 300, y: 220 } };
+    const route = commentArrowRoute(line, [line, rect], 700, 500)!;
+    expect(route.length).toBeGreaterThan(2);
+    expect(route.at(-1)).toEqual(line.end);
+  });
+  it('re-attaches the arrow to the handle facing the target instead of the saved one', () => {
+    // Saved exit point is 'left', but the target is to the right of the card.
+    const line: Annotation = { id: 'a', tool: 'arrow', color: '#FF4D2E', width: 4, label: 'Комментарий', labelX: 300, labelY: 100, labelWidth: 140, labelHeight: 70, labelAnchorSide: 'left' as const, labelAnchorRatio: 0.5, start: { x: 0, y: 0 }, end: { x: 460, y: 135 } };
+    const route = commentArrowRoute(line, [line], 700, 500)!;
+    const card = labelBounds(line, 700, 500)!;
+    expect(route[0]).toEqual({ x: card.x + card.width, y: card.y + card.height / 2 });
+    expect(route).toHaveLength(2);
+    expect(route.at(-1)).toEqual(line.end);
+  });
+  it('keeps the arrow off its own card when the target is inside a foreign card', () => {
+    const line: Annotation = { id: 'a', tool: 'arrow', color: '#FF4D2E', width: 4, label: 'Комментарий', labelX: 300, labelY: 100, labelWidth: 140, labelHeight: 70, labelAnchorSide: 'left' as const, labelAnchorRatio: 0.5, start: { x: 0, y: 0 }, end: { x: 500, y: 135 } };
+    const foreign: Annotation = { ...arrow, id: 'f', label: 'Чужой', labelX: 460, labelY: 100, labelWidth: 120, labelHeight: 70 };
+    const route = commentArrowRoute(line, [line, foreign], 700, 500)!;
+    const card = labelBounds(line, 700, 500)!;
+    // Leaves from the facing handle, not the saved 'left' one that would cross the card.
+    expect(route).not.toBeNull();
+    expect(route[0]).toEqual({ x: card.x + card.width, y: card.y + card.height / 2 });
+    expect(route.at(-1)).toEqual(line.end);
+  });
+  it('lets the arrow enter its own card when the target is inside it', () => {
+    const line: Annotation = { id: 'a', tool: 'arrow', color: '#FF4D2E', width: 4, label: 'Комментарий', labelX: 300, labelY: 100, labelWidth: 140, labelHeight: 70, labelAnchorSide: 'left' as const, labelAnchorRatio: 0.5, start: { x: 0, y: 0 }, end: { x: 370, y: 135 } };
+    const route = commentArrowRoute(line, [line], 700, 500)!;
+    const card = labelBounds(line, 700, 500)!;
+    expect(route.at(-1)).toEqual(line.end);
+    const onBorder = route[0]!.x === card.x || route[0]!.x === card.x + card.width || route[0]!.y === card.y || route[0]!.y === card.y + card.height;
+    expect(onBorder).toBe(true);
+  });
+  it('narrows the leader safe zone to 5px when the 10px zone leaves no path', () => {
+    // The leader reaches the card at (400,135), which sits inside a 10px zone
+    // above the block (top edge 142 - 10 = 132) but outside its 5px zone (137).
+    const rect: Annotation = { id: 'r', tool: 'rect', color: '#FF4D2E', width: 4, start: { x: 100, y: 100 }, end: { x: 200, y: 180 }, label: 'Блок', labelX: 400, labelY: 100, labelWidth: 140, labelHeight: 70 };
+    const obstacle: Annotation = { ...arrow, id: 'obs', label: 'Препятствие', labelX: 350, labelY: 142, labelWidth: 120, labelHeight: 54 };
+    const anchor = cardAnchor(rect, 700, 500)!;
+    expect(anchor.point).toEqual({ x: 400, y: 135 });
+    const route = commentLeaderRoute(rect, [rect, obstacle], 700, 500)!;
+    expect(route).not.toBeNull();
+    expect(route.at(-1)).toEqual(anchor.point);
   });
   it('wraps a long comment in a resizable card and exposes a resize handle', () => {
     const labeled = { ...arrow, label: 'Очень длинный комментарий для проверки переноса слов', labelWidth: 120 };
@@ -81,15 +126,16 @@ describe('annotation geometry', () => {
       start: { x: newBox.x + newBox.width, y: newBox.y + newBox.height / 2 },
     });
   });
-  it('routes a child arrow from its port around a foreign card to the target', () => {
+  it('re-attaches a child arrow to a different handle so it clears a foreign card', () => {
     const owner: Annotation = { ...arrow, id: 'owner', label: 'Источник', labelX: 360, labelY: 120, labelWidth: 150, labelHeight: 80 };
     const child: Annotation = { ...arrow, id: 'child', cardOwnerId: 'owner', cardPortX: 0, cardPortY: 0.5, start: { x: 0, y: 0 }, end: { x: 60, y: 250 } };
     const obstacle: Annotation = { ...arrow, id: 'b', label: 'Препятствие', labelX: 150, labelY: 130, labelWidth: 120, labelHeight: 110 };
     const annotations = [owner, child, obstacle];
     const route = commentArrowRoute(child, annotations, 600, 400)!;
-    expect(route.length).toBeGreaterThan(2);
-    expect(route[0]).toEqual(arrowStart(child, annotations, 600, 400));
     expect(route.at(-1)).toEqual(child.end);
+    const card = labelBounds(owner, 600, 400)!;
+    const onBorder = route[0]!.x === card.x || route[0]!.x === card.x + card.width || route[0]!.y === card.y || route[0]!.y === card.y + card.height;
+    expect(onBorder).toBe(true);
   });
   it('reports a resize direction along a rectangle border and nothing in its centre', () => {
     const box = { x: 100, y: 100, width: 200, height: 100 };
@@ -131,16 +177,26 @@ describe('annotation geometry', () => {
   it('ties a shape comment to the shape and routes the leader around other cards', () => {
     const rect: Annotation = { id: 'r', tool: 'rect', color: '#FF4D2E', width: 4, start: { x: 100, y: 100 }, end: { x: 200, y: 180 }, label: 'Блок', labelX: 400, labelY: 100, labelWidth: 140, labelHeight: 70 };
     const anchor = cardAnchor(rect, 600, 400)!;
+    // Shape comments leave from the middle of the card side nearest the shape.
+    expect(anchor).toEqual({ side: 'left', ratio: 0.5, point: { x: 400, y: 135 } });
     const straight = commentLeaderRoute(rect, [rect], 600, 400)!;
     expect(straight.length).toBeGreaterThanOrEqual(2);
-    expect(straight[0]).toEqual({ x: 200, y: 170 });
+    expect(straight[0]).toEqual({ x: 200, y: 135 });
     expect(straight.at(-1)).toEqual(anchor.point);
-    const obstacle: Annotation = { ...arrow, id: 'obs', label: 'Препятствие', labelX: 260, labelY: 150, labelWidth: 16, labelHeight: 40 };
+    const obstacle: Annotation = { ...arrow, id: 'obs', label: 'Препятствие', labelX: 260, labelY: 135, labelWidth: 16, labelHeight: 40 };
     const routed = commentLeaderRoute(rect, [rect, obstacle], 600, 400)!;
     expect(routed.length).toBeGreaterThan(2);
     expect(routed.at(-1)).toEqual(anchor.point);
     // Arrows and text are their own connector, so they have no leader route.
     expect(commentLeaderRoute({ ...arrow, label: 'Стрелка' }, [arrow], 600, 400)).toBeNull();
+  });
+  it('attaches shape comments from the middle of the card edge facing the shape', () => {
+    const shape = (extra: Partial<Annotation>): Annotation => ({ id: 's', tool: 'rect', color: '#FF4D2E', width: 4, start: { x: 200, y: 200 }, end: { x: 300, y: 280 }, ...extra } as Annotation);
+    expect(cardAnchor(shape({ label: 'Низ', labelX: 220, labelY: 360, labelWidth: 160, labelHeight: 70 }), 700, 500)).toMatchObject({ side: 'top', ratio: 0.5 });
+    expect(cardAnchor(shape({ label: 'Верх', labelX: 220, labelY: 40, labelWidth: 160, labelHeight: 70 }), 700, 500)).toMatchObject({ side: 'bottom', ratio: 0.5 });
+    expect(cardAnchor(shape({ label: 'Право', labelX: 430, labelY: 210, labelWidth: 160, labelHeight: 70 }), 700, 500)).toMatchObject({ side: 'left', ratio: 0.5 });
+    expect(cardAnchor(shape({ label: 'Лево', labelX: 20, labelY: 210, labelWidth: 160, labelHeight: 70 }), 700, 500)).toMatchObject({ side: 'right', ratio: 0.5 });
+    expect(cardAnchor(shape({ tool: 'ellipse', label: 'Овал', labelX: 220, labelY: 360, labelWidth: 160, labelHeight: 70 }), 700, 500)).toMatchObject({ side: 'top', ratio: 0.5 });
   });
   it('gives a pencil comment a leader anchored on its stroke', () => {
     const pencil: Annotation = { id: 'p', tool: 'pencil', color: '#FF4D2E', width: 4, points: [{ x: 100, y: 300 }, { x: 200, y: 100 }, { x: 300, y: 300 }], label: 'Карандаш', labelX: 100, labelY: 60, labelWidth: 140, labelHeight: 70 };

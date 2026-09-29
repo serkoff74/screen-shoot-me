@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { commentKeyAction, historyKeyAction, isPrintScreenKey } from '../editor/keyboard';
+import { commentKeyAction, historyKeyAction, isLaunchShortcut, isPrintScreenKey } from '../editor/keyboard';
 
 describe('comment keyboard contract', () => {
   it('commits on plain Enter', () => {
@@ -25,7 +25,16 @@ describe('comment keyboard contract', () => {
   it('detects PrintScreen by key or physical code', () => {
     expect(isPrintScreenKey({ key: 'PrintScreen' })).toBe(true);
     expect(isPrintScreenKey({ key: 'Unidentified', code: 'PrintScreen' })).toBe(true);
+    expect(isPrintScreenKey({ key: 'Unidentified', keyCode: 44 })).toBe(true);
     expect(isPrintScreenKey({ key: 'Insert', code: 'Insert' })).toBe(false);
+  });
+
+  it('uses Ctrl+PrintScreen as the single launch shortcut', () => {
+    expect(isLaunchShortcut({ key: 'PrintScreen', code: 'PrintScreen', ctrlKey: true, altKey: false, shiftKey: false })).toBe(true);
+    expect(isLaunchShortcut({ key: 'PrintScreen', code: 'PrintScreen', ctrlKey: false, altKey: true, shiftKey: false })).toBe(false);
+    expect(isLaunchShortcut({ key: 'PrintScreen', code: 'PrintScreen', ctrlKey: true, altKey: true, shiftKey: false })).toBe(false);
+    expect(isLaunchShortcut({ key: 'PrintScreen', code: 'PrintScreen', ctrlKey: true, altKey: false, shiftKey: true })).toBe(false);
+    expect(isLaunchShortcut({ key: 'a', code: 'KeyA', ctrlKey: true, altKey: false, shiftKey: false })).toBe(false);
   });
 
   it('matches the physical key so history works on a non-Latin layout', () => {

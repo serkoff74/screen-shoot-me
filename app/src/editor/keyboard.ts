@@ -7,15 +7,26 @@ export function commentKeyAction(event: CommentKeyInput): CommentKeyAction {
   return event.shiftKey || event.ctrlKey ? 'newline' : 'commit';
 }
 
-export type KeyLike = Pick<KeyboardEvent, 'key'> & { code?: string };
+export type KeyLike = Pick<KeyboardEvent, 'key'> & { code?: string; keyCode?: number };
 
 /**
  * `PrintScreen` cannot be bound through the Chrome commands API (unsupported key
  * and it requires Ctrl/Alt), so it is detected from raw key events instead. The
  * event only arrives when the OS/desktop environment does not grab the key.
+ * `keyCode === 44` is a fallback for platforms that report `Unidentified`.
  */
 export function isPrintScreenKey(event: KeyLike): boolean {
-  return event.key === 'PrintScreen' || event.code === 'PrintScreen';
+  return event.key === 'PrintScreen' || event.code === 'PrintScreen' || event.keyCode === 44;
+}
+
+export type LaunchKeyInput = KeyLike & Pick<KeyboardEvent, 'ctrlKey' | 'altKey' | 'shiftKey'>;
+
+/**
+ * The best-effort secondary launch shortcut `Ctrl+PrintScreen` (no other
+ * modifiers). The primary launch key is the Chrome command `Alt+Insert`.
+ */
+export function isLaunchShortcut(event: LaunchKeyInput): boolean {
+  return event.ctrlKey && !event.altKey && !event.shiftKey && isPrintScreenKey(event);
 }
 
 export type HistoryKeyInput = Pick<KeyboardEvent, 'key' | 'shiftKey' | 'ctrlKey' | 'metaKey'> & { code?: string };

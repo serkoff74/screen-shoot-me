@@ -98,14 +98,38 @@ export type CardAnchor = { side: LabelAnchorSide; ratio: number; point: Point };
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
+function anchorPointOnSide(label: Bounds, side: LabelAnchorSide, ratio: number): Point {
+  if (side === 'top') return { x: label.x + label.width * ratio, y: label.y };
+  if (side === 'right') return { x: label.x + label.width, y: label.y + label.height * ratio };
+  if (side === 'bottom') return { x: label.x + label.width * ratio, y: label.y + label.height };
+  return { x: label.x, y: label.y + label.height * ratio };
+}
+
+/** Card side whose border segment is closest to the reference point. */
+function nearestCardSide(label: Bounds, reference: Point): LabelAnchorSide {
+  const distances: Array<[LabelAnchorSide, number]> = [
+    ['top', pointToSegmentDistance(reference, { x: label.x, y: label.y }, { x: label.x + label.width, y: label.y })],
+    ['right', pointToSegmentDistance(reference, { x: label.x + label.width, y: label.y }, { x: label.x + label.width, y: label.y + label.height })],
+    ['bottom', pointToSegmentDistance(reference, { x: label.x, y: label.y + label.height }, { x: label.x + label.width, y: label.y + label.height })],
+    ['left', pointToSegmentDistance(reference, { x: label.x, y: label.y }, { x: label.x, y: label.y + label.height })],
+  ];
+  return distances.reduce((closest, item) => item[1] < closest[1] ? item : closest)[0];
+}
+
 /**
- * Keeps a comment arrow attached to the same side of its card. Legacy annotations
- * derive that side from the old arrow tail, so opening an existing screenshot does
- * not make its connector jump.
+ * Keeps a comment connector attached to a stable point on its card. Shape
+ * comments (rect/ellipse/pencil) always leave from the middle of the card side
+ * nearest the shape; arrow comments keep their saved exit point so the arrow
+ * does not jump when the card moves.
  */
 export function cardAnchor(annotation: Annotation, canvasWidth: number, canvasHeight: number): CardAnchor | null {
   const label = labelBounds(annotation, canvasWidth, canvasHeight);
   if (!label) return null;
+  if (annotation.tool === 'rect' || annotation.tool === 'ellipse' || annotation.tool === 'pencil') {
+    const shape = boundsOf(annotation);
+    const side = nearestCardSide(label, { x: shape.x + shape.width / 2, y: shape.y + shape.height / 2 });
+    return { side, ratio: 0.5, point: anchorPointOnSide(label, side, 0.5) };
+  }
   const legacy = labelAnchor(annotation);
   const distances: Array<[LabelAnchorSide, number]> = [
     ['top', Math.abs(legacy.y - label.y)], ['right', Math.abs(legacy.x - (label.x + label.width))],
@@ -114,11 +138,7 @@ export function cardAnchor(annotation: Annotation, canvasWidth: number, canvasHe
   const side = annotation.labelAnchorSide ?? distances.reduce((closest, item) => item[1] < closest[1] ? item : closest)[0];
   const ratio = clamp(annotation.labelAnchorRatio ?? (side === 'top' || side === 'bottom'
     ? (legacy.x - label.x) / label.width : (legacy.y - label.y) / label.height), 0, 1);
-  const point = side === 'top' ? { x: label.x + label.width * ratio, y: label.y }
-    : side === 'right' ? { x: label.x + label.width, y: label.y + label.height * ratio }
-      : side === 'bottom' ? { x: label.x + label.width * ratio, y: label.y + label.height }
-        : { x: label.x, y: label.y + label.height * ratio };
-  return { side, ratio, point };
+  return { side, ratio, point: anchorPointOnSide(label, side, ratio) };
 }
 
 export function withCardAnchor(annotation: Annotation, canvasWidth: number, canvasHeight: number): Annotation {
@@ -146,28 +166,20 @@ function segmentIntersectsBounds(a: Point, b: Point, box: Bounds): boolean {
     && from < to && to > 0.0001 && from < 0.9999;
 }
 
-/**
- * Resolves the start point of an arrow. Child arrows are owned by a comment
- * card and leave it through a normalised port, so their start is derived from
- * the owner's current bounds instead of a stored coordinate.
- */
-export function arrowStart(annotation: Annotation, annotations: Annotation[], canvasWidth: number, canvasHeight: number): Point {
-  if (annotation.tool !== 'arrow') return (annotation as { start: Point }).start;
-  if (annotation.cardOwnerId && annotation.cardPortX != null && annotation.cardPortY != null) {
-    const owner = annotations.find((item) => item.id === annotation.cardOwnerId);
-    const port = owner ? cardPortPoint(owner, annotation.cardPortX, annotation.cardPortY, canvasWidth, canvasHeight) : null;
-    if (port) return port;
-  }
-  return annotation.start;
-}
+/** Preferred clearance between a route and an obstacle, in canvas pixels. */
+const ROUTE_PADDING = 10;
+/** Minimum clearance used when the preferred safe zone leaves no valid path. */
+const ROUTE_PADDING_MIN = 5;
 
 /**
  * Shortest route between two points that does not cross any obstacle box. The
  * boxes are treated as their expanded corners, so the path bends around them.
+ * Returns null when every path is blocked (the caller then falls back).
  */
-function routeAround(start: Point, end: Point, obstacles: Bounds[]): Point[] {
+function routeAround(start: Point, end: Point, obstacles: Bounds[]): Point[] | null {
   const nodes: Point[] = [start, end];
-  const clearance = 2;
+  // Extra clearance so the smoothed (Bezier) arrow keeps out of the safe zone.
+  const clearance = 4;
   obstacles.forEach((box) => nodes.push(
     { x: box.x - clearance, y: box.y - clearance }, { x: box.x + box.width + clearance, y: box.y - clearance },
     { x: box.x + box.width + clearance, y: box.y + box.height + clearance }, { x: box.x - clearance, y: box.y + box.height + clearance },
@@ -185,33 +197,122 @@ function routeAround(start: Point, end: Point, obstacles: Bounds[]): Point[] {
       if (candidate < distances[next]!) { distances[next] = candidate; previous[next] = current; }
     }
   }
-  if (!Number.isFinite(distances[1])) return [start, end];
+  if (!Number.isFinite(distances[1])) return null;
   const route: Point[] = [];
   for (let cursor = 1; cursor >= 0; cursor = previous[cursor]!) { route.unshift(nodes[cursor]!); if (cursor === 0) break; }
   return route;
 }
 
-function cardObstacles(annotation: Annotation, annotations: Annotation[], canvasWidth: number, canvasHeight: number, padding: number, excludeId = annotation.id): Bounds[] {
-  return annotations.filter((item) => item.id !== annotation.id && item.id !== excludeId && item.label?.trim())
-    .map((item) => labelBounds(item, canvasWidth, canvasHeight)).filter((item): item is Bounds => Boolean(item)).map((item) => expanded(item, padding));
+/**
+ * Obstacles that a route must avoid: every comment card plus rect/ellipse
+ * shapes (pencil strokes are ignored for now). The annotation itself and its
+ * owning card are excluded.
+ */
+function routeObstacleBoxes(annotation: Annotation, annotations: Annotation[], canvasWidth: number, canvasHeight: number, excludeId = annotation.id): Bounds[] {
+  const boxes: Bounds[] = [];
+  for (const item of annotations) {
+    if (item.id === annotation.id || item.id === excludeId) continue;
+    const label = labelBounds(item, canvasWidth, canvasHeight);
+    if (label) boxes.push(label);
+    if (item.tool === 'rect' || item.tool === 'ellipse') boxes.push(boundsOf(item));
+  }
+  return boxes;
 }
 
-/** Returns a short visibility route around other comment cards and their safe area. */
-export function commentArrowRoute(annotation: Annotation, annotations: Annotation[], canvasWidth: number, canvasHeight: number, padding = 16): Point[] | null {
-  if (annotation.tool !== 'arrow') return null;
-  const ownerId = annotation.cardOwnerId;
-  let start: Point | null;
-  let excludedId = annotation.id;
-  if (ownerId) {
-    // The owner card is where the arrow leaves from, so it is not an obstacle.
-    start = arrowStart(annotation, annotations, canvasWidth, canvasHeight);
-    excludedId = ownerId;
-  } else {
-    if (!annotation.label?.trim()) return null;
-    start = cardAnchor(annotation, canvasWidth, canvasHeight)?.point ?? null;
+/**
+ * Routes around the obstacles with a safe zone around each one. It first tries
+ * the full {@link ROUTE_PADDING}, then narrows it down to
+ * {@link ROUTE_PADDING_MIN} when the wider zone leaves no path, and only falls
+ * back to a straight line when even that does not fit.
+ */
+function routeAvoiding(start: Point, end: Point, boxes: Bounds[], padding = ROUTE_PADDING): Point[] {
+  for (const step of [padding, Math.max(ROUTE_PADDING_MIN, Math.floor(padding / 2))]) {
+    const route = routeAround(start, end, boxes.map((box) => expanded(box, step)));
+    if (route) return route;
   }
-  if (!start) return null;
-  return routeAround(start, annotation.end, cardObstacles(annotation, annotations, canvasWidth, canvasHeight, padding, excludedId));
+  return [start, end];
+}
+
+function routeLength(route: Point[]): number {
+  let total = 0;
+  for (let index = 1; index < route.length; index += 1) total += Math.hypot(route[index]!.x - route[index - 1]!.x, route[index]!.y - route[index - 1]!.y);
+  return total;
+}
+
+/** The connection handle (port) on a card closest to the target point. */
+function nearestHandle(box: Bounds, target: Point): Point {
+  let best: Point = { x: box.x, y: box.y };
+  let bestDistance = Infinity;
+  for (const { portX, portY } of CARD_PORTS) {
+    const point = { x: box.x + box.width * portX, y: box.y + box.height * portY };
+    const distance = Math.hypot(point.x - target.x, point.y - target.y);
+    if (distance < bestDistance) { bestDistance = distance; best = point; }
+  }
+  return best;
+}
+
+/**
+ * Obstacles for an arrow route: every comment card (including the arrow's own
+ * card) plus rect/ellipse shapes. The arrow annotation itself is never an
+ * obstacle, and its owner card is returned separately so it can use a zero
+ * safe zone (the arrow starts right on its border).
+ */
+function arrowObstacles(annotation: Annotation, ownerId: string, annotations: Annotation[], canvasWidth: number, canvasHeight: number): Bounds[] {
+  const boxes: Bounds[] = [];
+  for (const item of annotations) {
+    if (item.id === annotation.id) continue;
+    // The owner card is passed separately (zero safe zone); its rect/ellipse
+    // shape is still an obstacle, but its label is not added twice.
+    if (item.id !== ownerId) {
+      const label = labelBounds(item, canvasWidth, canvasHeight);
+      if (label) boxes.push(label);
+    }
+    if (item.tool === 'rect' || item.tool === 'ellipse') boxes.push(boundsOf(item));
+  }
+  return boxes;
+}
+
+/** Route from a card handle that leaves the card and avoids every obstacle. */
+function routeFromCard(start: Point, end: Point, card: Bounds | null, obstacles: Bounds[], padding: number): Point[] | null {
+  for (const step of [padding, Math.max(ROUTE_PADDING_MIN, Math.floor(padding / 2))]) {
+    const boxes = card ? [card, ...obstacles.map((box) => expanded(box, step))] : obstacles.map((box) => expanded(box, step));
+    const route = routeAround(start, end, boxes);
+    if (route) return route;
+  }
+  return null;
+}
+
+/**
+ * The arrow's own comment card is an obstacle and its attachment point is
+ * dynamic: every handle of the card is tried and the shortest route that never
+ * crosses the card or any other obstacle wins. This re-attaches the arrow to a
+ * different side when the card or target moves.
+ */
+export function commentArrowRoute(annotation: Annotation, annotations: Annotation[], canvasWidth: number, canvasHeight: number, padding = ROUTE_PADDING): Point[] | null {
+  if (annotation.tool !== 'arrow') return null;
+  const owner = annotation.cardOwnerId
+    ? annotations.find((item) => item.id === annotation.cardOwnerId)
+    : (annotation.label?.trim() ? annotation : undefined);
+  if (!owner) return null;
+  const card = labelBounds(owner, canvasWidth, canvasHeight);
+  if (!card) return null;
+  const contains = (box: Bounds) => annotation.end.x > box.x && annotation.end.x < box.x + box.width && annotation.end.y > box.y && annotation.end.y < box.y + box.height;
+  // Reaching a target inside a box unavoidably crosses that box, so only boxes
+  // holding the target are dropped (e.g. the arrow's own card). Every other
+  // card/shape stays an obstacle, so the arrow never crosses its own card just
+  // because the target sits inside some other card.
+  const obstacles = arrowObstacles(annotation, owner.id, annotations, canvasWidth, canvasHeight).filter((box) => !contains(box));
+  const cardObstacle = contains(card) ? null : card;
+  let best: Point[] | null = null;
+  let bestLength = Infinity;
+  for (const { portX, portY } of CARD_PORTS) {
+    const start = { x: card.x + card.width * portX, y: card.y + card.height * portY };
+    const route = routeFromCard(start, annotation.end, cardObstacle, obstacles, padding);
+    if (!route) continue;
+    const length = routeLength(route);
+    if (length < bestLength) { bestLength = length; best = route; }
+  }
+  return best ?? [nearestHandle(card, annotation.end), annotation.end];
 }
 
 /** Closest point on (or inside projected to) a rectangle's border. */
@@ -266,13 +367,13 @@ function shapeAnchorPoint(annotation: Annotation, point: Point): Point {
  * avoids other comment cards the same way arrow routes do. Arrows are their own
  * connector and text is a card, so both return null.
  */
-export function commentLeaderRoute(annotation: Annotation, annotations: Annotation[], canvasWidth: number, canvasHeight: number, padding = 16): Point[] | null {
+export function commentLeaderRoute(annotation: Annotation, annotations: Annotation[], canvasWidth: number, canvasHeight: number, padding = ROUTE_PADDING): Point[] | null {
   if (annotation.tool !== 'rect' && annotation.tool !== 'ellipse' && annotation.tool !== 'pencil') return null;
   if (!annotation.label?.trim()) return null;
   const anchor = cardAnchor(annotation, canvasWidth, canvasHeight);
   if (!anchor) return null;
   const target = shapeAnchorPoint(annotation, anchor.point);
-  return routeAround(target, anchor.point, cardObstacles(annotation, annotations, canvasWidth, canvasHeight, padding));
+  return routeAvoiding(target, anchor.point, routeObstacleBoxes(annotation, annotations, canvasWidth, canvasHeight), padding);
 }
 
 export function hitTestLabel(annotation: Annotation, point: Point, canvasWidth: number, canvasHeight: number, tolerance = 5): boolean {

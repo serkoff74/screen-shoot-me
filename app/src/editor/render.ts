@@ -2,6 +2,9 @@ import type { Annotation, Bounds, Point } from '../shared';
 import { UI_BLUE } from '../shared';
 import { boundsOf, cardPorts, commentArrowRoute, commentLeaderRoute, LABEL_HANDLE_PADDING, LABEL_HANDLE_SIZE, labelBounds, labelLayout, SHAPE_HANDLE_PADDING, shapeHandles } from './geometry';
 
+/** Catmull-Rom tension for routed arrows (1 = standard, lower = tighter to the waypoints). */
+const ROUTE_SMOOTHING = 0.6;
+
 function pathPencil(ctx: CanvasRenderingContext2D, points: Point[]): void {
   if (points.length < 2) return;
   ctx.beginPath();
@@ -28,18 +31,27 @@ function shapePath(ctx: CanvasRenderingContext2D, annotation: Annotation, annota
     const route = commentArrowRoute(annotation, annotations, ctx.canvas.width, ctx.canvas.height);
     const points = route ?? [annotation.start, annotation.end];
     const start = points[0]!; const end = points[points.length - 1]!;
-    const beforeEnd = points[points.length - 2] ?? start;
-    const angle = Math.atan2(end.y - beforeEnd.y, end.x - beforeEnd.x);
     const head = Math.max(14, annotation.width * 4);
     ctx.moveTo(start.x, start.y);
-    if (points.length === 2) ctx.lineTo(end.x, end.y);
-    else {
-      for (let index = 1; index < points.length - 1; index += 1) {
-        const current = points[index]!; const next = points[index + 1]!;
-        ctx.quadraticCurveTo(current.x, current.y, (current.x + next.x) / 2, (current.y + next.y) / 2);
-      }
+    let approach = start;
+    if (points.length === 2) {
       ctx.lineTo(end.x, end.y);
+    } else {
+      // Smooth the route into a Bezier curve. A Catmull-Rom spline emitted as
+      // cubics passes through every waypoint, so it stays inside the safe zone
+      // instead of cutting corners into the obstacles.
+      for (let index = 0; index < points.length - 1; index += 1) {
+        const p0 = points[index - 1] ?? points[index]!;
+        const p1 = points[index]!;
+        const p2 = points[index + 1]!;
+        const p3 = points[index + 2] ?? p2;
+        const c1 = { x: p1.x + (p2.x - p0.x) * ROUTE_SMOOTHING / 6, y: p1.y + (p2.y - p0.y) * ROUTE_SMOOTHING / 6 };
+        const c2 = { x: p2.x - (p3.x - p1.x) * ROUTE_SMOOTHING / 6, y: p2.y - (p3.y - p1.y) * ROUTE_SMOOTHING / 6 };
+        ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, p2.x, p2.y);
+        if (index === points.length - 2) approach = c2;
+      }
     }
+    const angle = Math.atan2(end.y - approach.y, end.x - approach.x);
     ctx.moveTo(end.x, end.y);
     ctx.lineTo(end.x - head * Math.cos(angle - Math.PI / 6), end.y - head * Math.sin(angle - Math.PI / 6));
     ctx.moveTo(end.x, end.y);
@@ -206,15 +218,26 @@ function drawCardPorts(ctx: CanvasRenderingContext2D, annotation: Annotation, ho
   for (let i = 0; i < ports.length; i += 1) {
     const p = ports[i]!;
     const isHovered = hoverPortIndex === i;
-    const r = isHovered ? 6 : 4;
+    const r = isHovered ? 5 : 3.5;
     ctx.globalAlpha = isHovered ? 1 : baseAlpha;
     ctx.beginPath();
     ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-    ctx.fillStyle = isHovered ? UI_BLUE : '#fff';
+    ctx.fillStyle = '#fff';
     ctx.fill();
     ctx.strokeStyle = UI_BLUE;
     ctx.lineWidth = isHovered ? 2 : 1.5;
     ctx.stroke();
+    if (isHovered) {
+      // A plus inside the hovered port hints that an arrow can be pulled from it.
+      const arm = r * 0.85;
+      ctx.beginPath();
+      ctx.moveTo(p.x - arm, p.y);
+      ctx.lineTo(p.x + arm, p.y);
+      ctx.moveTo(p.x, p.y - arm);
+      ctx.lineTo(p.x, p.y + arm);
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
   }
   ctx.restore();
 }
