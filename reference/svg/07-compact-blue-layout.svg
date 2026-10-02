@@ -1,0 +1,106 @@
+<svg viewBox="0 0 960 600" width="960" height="600" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <defs>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="180%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#0F172A" flood-opacity=".22"/>
+    </filter>
+    <marker id="arrowhead-halo" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10Z" fill="#FFFFFF"/>
+    </marker>
+    <marker id="arrowhead" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10Z" fill="#FF4D2E"/>
+    </marker>
+    <!-- Tabler Icons 3.46.0 (MIT), embedded as local symbols. -->
+    <symbol id="i-select" viewBox="0 0 24 24"><path d="M7.904 17.563a1.2 1.2 0 0 0 2.228 .308l2.09 -3.093l4.907 4.907a1.067 1.067 0 0 0 1.509 0l1.047 -1.047a1.067 1.067 0 0 0 0 -1.509l-4.907 -4.907l3.113 -2.09a1.2 1.2 0 0 0 -.309 -2.228l-13.582 -3.904l3.904 13.563"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M17 7l-10 10"/><path d="M8 7h9v9"/></symbol>
+    <symbol id="i-rect" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v10a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-10"/></symbol>
+    <symbol id="i-ellipse" viewBox="0 0 24 24"><path d="M3 12c0 -3.314 4.03 -6 9 -6s9 2.686 9 6s-4.03 6 -9 6s-9 -2.686 -9 -6"/></symbol>
+    <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4"/><path d="M13.5 6.5l4 4"/></symbol>
+    <symbol id="i-text" viewBox="0 0 24 24"><path d="M6 4h12"/><path d="M12 4v16"/></symbol>
+    <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14l-4 -4l4 -4"/><path d="M5 10h11a4 4 0 1 1 0 8h-1"/></symbol>
+    <symbol id="i-redo" viewBox="0 0 24 24"><path d="M15 14l4 -4l-4 -4"/><path d="M19 10h-11a4 4 0 1 0 0 8h1"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><path d="M7 9.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667v-8.666"/><path d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1"/></symbol>
+    <symbol id="i-save" viewBox="0 0 24 24"><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2"/><path d="M7 11l5 5l5 -5"/><path d="M12 4v12"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M18 6l-12 12"/><path d="M6 6l12 12"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12l5 5l10 -10"/></symbol>
+  </defs>
+
+  <rect width="960" height="600" fill="#E9EEF5"/>
+  <rect x="0" y="0" width="960" height="58" fill="#FFFFFF"/>
+  <circle cx="35" cy="29" r="12" fill="#3B82F6"/>
+  <rect x="58" y="21" width="126" height="16" rx="5" fill="#CAD5E3"/>
+  <rect x="725" y="20" width="78" height="18" rx="9" fill="#E2E8F0"/>
+  <rect x="817" y="20" width="106" height="18" rx="9" fill="#E2E8F0"/>
+  <rect x="64" y="94" width="290" height="23" rx="6" fill="#26364D"/>
+  <rect x="64" y="132" width="465" height="10" rx="5" fill="#AAB7C8"/>
+  <rect x="64" y="153" width="392" height="10" rx="5" fill="#C5CFDC"/>
+  <rect x="64" y="202" width="388" height="238" rx="12" fill="#FFFFFF"/>
+  <rect x="86" y="227" width="144" height="14" rx="5" fill="#D7DFE9"/>
+  <rect x="86" y="258" width="328" height="9" rx="4" fill="#E5EAF1"/>
+  <rect x="86" y="278" width="283" height="9" rx="4" fill="#E5EAF1"/>
+  <rect x="86" y="318" width="140" height="40" rx="7" fill="#CBD5E1"/>
+  <rect x="470" y="202" width="426" height="238" rx="12" fill="#FFFFFF"/>
+  <rect x="493" y="227" width="175" height="14" rx="5" fill="#D7DFE9"/>
+  <rect x="493" y="258" width="356" height="9" rx="4" fill="#E5EAF1"/>
+  <rect x="493" y="278" width="305" height="9" rx="4" fill="#E5EAF1"/>
+  <rect x="493" y="318" width="150" height="40" rx="7" fill="#3B82F6"/>
+  <text x="568" y="343" text-anchor="middle" font-family="Inter,system-ui,sans-serif" font-size="13" font-weight="600" fill="#FFFFFF">Отправить</text>
+
+  <!-- selected crop -->
+  <path d="M0 0H960V600H0Z M44 74H916V500H44Z" fill="#0F172A" fill-opacity=".37" fill-rule="evenodd"/>
+  <rect x="44" y="74" width="872" height="426" rx="3" fill="none" stroke="#3B82F6" stroke-width="2"/>
+  <text x="54" y="522" font-family="Inter,system-ui,sans-serif" font-size="11" fill="#52647B">872 × 426 px</text>
+
+  <!-- top options bar -->
+  <g>
+    <rect x="105" y="24" width="811" height="38" rx="8" fill="#18212F" fill-opacity=".97"/>
+    <text x="121" y="48" font-family="Inter,system-ui,sans-serif" font-size="12" font-weight="600" fill="#F8FAFC">Стрелка</text>
+    <line x1="183" y1="33" x2="183" y2="53" stroke="#40506A"/>
+    <rect x="194" y="31" width="92" height="24" rx="6" fill="#253044"/>
+    <circle cx="209" cy="43" r="5" fill="#FF4D2E"/><text x="220" y="47" font-family="Inter,system-ui,sans-serif" font-size="11" fill="#E5ECF5">Авто</text><path d="M274 40l4 4 4-4" fill="none" stroke="#AAB7C8"/>
+    <rect x="294" y="31" width="64" height="24" rx="6" fill="#253044"/>
+    <line x1="307" y1="43" x2="327" y2="43" stroke="#E5ECF5" stroke-width="3" stroke-linecap="round"/><text x="338" y="47" font-family="Inter,system-ui,sans-serif" font-size="11" fill="#E5ECF5">3</text>
+    <rect x="366" y="31" width="112" height="24" rx="6" fill="#253044"/>
+    <text x="379" y="47" font-family="Inter,system-ui,sans-serif" font-size="11" fill="#E5ECF5">Сужающаяся</text><path d="M465 40l4 4 4-4" fill="none" stroke="#AAB7C8"/>
+    <rect x="486" y="31" width="126" height="24" rx="6" fill="#253044"/>
+    <text x="499" y="47" font-family="Inter,system-ui,sans-serif" font-size="11" fill="#E5ECF5">Подпись: авто</text><path d="M599 40l4 4 4-4" fill="none" stroke="#AAB7C8"/>
+    <line x1="814" y1="33" x2="814" y2="53" stroke="#40506A"/>
+    <g transform="translate(826 29)"><rect width="28" height="28" rx="6" fill="#253044"/><use xlink:href="#i-copy" x="5" y="5" width="18" height="18" fill="none" stroke="#F8FAFC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>
+    <g transform="translate(860 29)"><rect width="28" height="28" rx="6" fill="#3B82F6"/><use xlink:href="#i-save" x="5" y="5" width="18" height="18" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>
+  </g>
+
+  <!-- left icon toolbar -->
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="54" y="86" width="38" height="332" rx="8" fill="#18212F" fill-opacity=".97" stroke="none"/>
+    <g transform="translate(59 93)"><rect width="28" height="28" rx="6" fill="#253044" stroke="none"/><use xlink:href="#i-select" x="5" y="5" width="18" height="18" stroke="#DCE5F0" stroke-width="2"/></g>
+    <g transform="translate(59 125)"><rect width="28" height="28" rx="6" fill="#1E3A5F" stroke="#3B82F6"/><use xlink:href="#i-arrow" x="5" y="5" width="18" height="18" stroke="#7DB1FF" stroke-width="2"/></g>
+    <g transform="translate(59 157)"><rect width="28" height="28" rx="6" fill="#253044" stroke="none"/><use xlink:href="#i-rect" x="5" y="5" width="18" height="18" stroke="#DCE5F0" stroke-width="2"/></g>
+    <g transform="translate(59 189)"><rect width="28" height="28" rx="6" fill="#253044" stroke="none"/><use xlink:href="#i-ellipse" x="5" y="5" width="18" height="18" stroke="#DCE5F0" stroke-width="2"/></g>
+    <g transform="translate(59 221)"><rect width="28" height="28" rx="6" fill="#253044" stroke="none"/><use xlink:href="#i-pencil" x="5" y="5" width="18" height="18" stroke="#DCE5F0" stroke-width="2"/></g>
+    <g transform="translate(59 253)"><rect width="28" height="28" rx="6" fill="#253044" stroke="none"/><use xlink:href="#i-text" x="5" y="5" width="18" height="18" stroke="#DCE5F0" stroke-width="2"/></g>
+    <line x1="62" y1="292" x2="84" y2="292" stroke="#40506A"/>
+    <g transform="translate(59 300)"><use xlink:href="#i-undo" x="5" y="5" width="18" height="18" stroke="#DCE5F0" stroke-width="2"/></g>
+    <g transform="translate(59 330)" opacity=".42"><use xlink:href="#i-redo" x="5" y="5" width="18" height="18" stroke="#DCE5F0" stroke-width="2"/></g>
+    <line x1="62" y1="365" x2="84" y2="365" stroke="#40506A"/>
+    <g transform="translate(59 371)"><use xlink:href="#i-close" x="5" y="5" width="18" height="18" stroke="#DCE5F0" stroke-width="2"/></g>
+  </g>
+
+  <!-- arrow annotation and comment -->
+  <path d="M693 390Q618 325 575 331" fill="none" stroke="#FFFFFF" stroke-width="8" stroke-linecap="round" marker-end="url(#arrowhead-halo)" opacity=".94"/>
+  <path d="M693 390Q618 325 575 331" fill="none" stroke="#FF4D2E" stroke-width="3" stroke-linecap="round" marker-end="url(#arrowhead)"/>
+  <rect x="677" y="373" width="202" height="62" rx="10" fill="#18212F"/>
+  <rect x="677" y="373" width="202" height="62" rx="10" fill="none" stroke="#3B82F6" stroke-width="1.5"/>
+  <text x="692" y="397" font-family="Inter,system-ui,sans-serif" font-size="13" fill="#F8FAFC">Кнопка перекрывает</text>
+  <text x="692" y="417" font-family="Inter,system-ui,sans-serif" font-size="13" fill="#F8FAFC">текст на узком экране</text>
+  <line x1="849" y1="403" x2="849" y2="419" stroke="#7DB1FF" stroke-width="1.5"/>
+  <g transform="translate(844 377)"><rect width="28" height="28" rx="6" fill="#3B82F6"/><use xlink:href="#i-check" x="5" y="5" width="18" height="18" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>
+  <text x="677" y="454" font-family="Inter,system-ui,sans-serif" font-size="10.5" fill="#52647B">Новая строка · Shift/Ctrl+Enter</text>
+
+  <!-- save tooltip -->
+  <g>
+    <path d="M874 70l-5 7h10z" fill="#18212F"/>
+    <rect x="777" y="77" width="140" height="30" rx="6" fill="#18212F"/>
+    <text x="847" y="97" text-anchor="middle" font-family="Inter,system-ui,sans-serif" font-size="11" fill="#F8FAFC">Сохранить  ·  Ctrl+S</text>
+  </g>
+
+  <text x="480" y="565" text-anchor="middle" font-family="Inter,system-ui,sans-serif" font-size="12" fill="#52647B">Tabler SVG · синий UI · коралловые аннотации с halo · copy + save</text>
+</svg>

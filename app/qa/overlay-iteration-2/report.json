@@ -1,0 +1,40 @@
+{
+  "date": "2026-09-15",
+  "chrome": "Chrome for Testing 153.0.8010.36",
+  "extensionId": "egoapejcamijpgkmjbnijkeeplkfkahh",
+  "visualCyclesUsed": 2,
+  "visualCyclesLimit": 2,
+  "checks": {
+    "liveSelectionBeforeCapture": "pass",
+    "captureRequestsBeforePointerUp": 0,
+    "captureRequestsAfterPointerUp": 1,
+    "ordinaryPageCreatedWindow": false,
+    "fragmentStayedAtOriginalCoordinates": "pass",
+    "outsideMaskOpacity": 0.12,
+    "fullscreenStageRemoved": "pass",
+    "snapmarkFrameAbsentFromCrop": "pass",
+    "resizeTriggeredRecapture": false,
+    "pageInputBlockedAndRestored": "pass",
+    "coralArrowAndHalo": "pass",
+    "coralRectangleAndBlueSelectionUi": "pass",
+    "copyExport": "pass",
+    "saveAsTrueProductionPath": "pass-static",
+    "dynamicInjectionBundleResolved": "pass-browser",
+    "restrictedSurfaceFlow": "pass-code-audit",
+    "commentEnter": "fixed-after-cycle-2-and-unit-tested",
+    "shiftEnterAndCtrlEnter": "pass-unit",
+    "secondEnterCopy": "fixed-after-cycle-2-and-unit-tested",
+    "legacy07dHashesUnchanged": true
+  },
+  "artifacts": [
+    "01-live-selection.png",
+    "02-inline-arrow-comment.png",
+    "example-1-arrow-comment.png",
+    "example-2-rectangle-comment.png"
+  ],
+  "notes": [
+    "Iteration 1 stopped after live selection because the QA harness left a service tab active during captureVisibleTab.",
+    "Iteration 2 reached both examples and exposed a keyboard capture-order bug; the fix was verified by dedicated unit tests without a prohibited third visual cycle.",
+    "Native OS Save As UI is intentionally not driven by Puppeteer."
+  ]
+}

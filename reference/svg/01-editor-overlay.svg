@@ -1,0 +1,38 @@
+<svg viewBox="0 0 640 400" width="1280" height="800" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#D85A30"/></marker></defs>
+<rect x="0" y="0" width="640" height="400" rx="8" fill="#DAD8CF"/>
+<rect x="120" y="70" width="400" height="230" rx="4" fill="#ffffff" stroke="#888780" stroke-width="1"/>
+<rect x="140" y="90" width="180" height="14" rx="3" fill="#D3D1C7"/>
+<rect x="140" y="114" width="360" height="8" rx="3" fill="#F1EFE8"/>
+<rect x="140" y="130" width="300" height="8" rx="3" fill="#F1EFE8"/>
+<rect x="140" y="146" width="340" height="8" rx="3" fill="#F1EFE8"/>
+<rect x="140" y="180" width="110" height="34" rx="6" fill="#378ADD"/>
+<text x="195" y="202" text-anchor="middle" font-size="12" fill="#ffffff">Сохранить</text>
+<rect x="270" y="180" width="110" height="34" rx="6" fill="#ffffff" stroke="#B4B2A9"/>
+<text x="325" y="202" text-anchor="middle" font-size="12" fill="#444441">Отмена</text>
+<rect x="140" y="236" width="360" height="8" rx="3" fill="#F1EFE8"/>
+<rect x="140" y="252" width="260" height="8" rx="3" fill="#F1EFE8"/>
+<ellipse cx="195" cy="197" rx="70" ry="27" fill="none" stroke="#D85A30" stroke-width="3"/>
+<line x1="258" y1="180" x2="300" y2="150" stroke="#D85A30" stroke-width="2"/>
+<rect x="300" y="132" width="196" height="26" rx="13" fill="#D85A30"/>
+<text x="398" y="149" text-anchor="middle" font-size="12" fill="#ffffff">Кнопка не реагирует на клик</text>
+<text x="120" y="60" font-size="11" fill="#5F5E5A">400 × 230</text>
+<g>
+<rect x="88" y="322" width="464" height="44" rx="10" fill="#2C2C2A"/>
+<rect x="100" y="330" width="28" height="28" rx="6" fill="#444441"/><text x="114" y="349" text-anchor="middle" font-size="12" fill="#F1EFE8" font-family="monospace">V</text>
+<rect x="132" y="330" width="28" height="28" rx="6" fill="#D85A30"/><text x="146" y="349" text-anchor="middle" font-size="12" fill="#ffffff" font-family="monospace">A</text>
+<rect x="164" y="330" width="28" height="28" rx="6" fill="#444441"/><text x="178" y="349" text-anchor="middle" font-size="12" fill="#F1EFE8" font-family="monospace">R</text>
+<rect x="196" y="330" width="28" height="28" rx="6" fill="#444441"/><text x="210" y="349" text-anchor="middle" font-size="12" fill="#F1EFE8" font-family="monospace">O</text>
+<rect x="228" y="330" width="28" height="28" rx="6" fill="#444441"/><text x="242" y="349" text-anchor="middle" font-size="12" fill="#F1EFE8" font-family="monospace">P</text>
+<rect x="260" y="330" width="28" height="28" rx="6" fill="#444441"/><text x="274" y="349" text-anchor="middle" font-size="12" fill="#F1EFE8" font-family="monospace">T</text>
+<line x1="300" y1="332" x2="300" y2="356" stroke="#5F5E5A"/>
+<circle cx="318" cy="344" r="8" fill="#D85A30" stroke="#ffffff" stroke-width="2"/>
+<circle cx="340" cy="344" r="8" fill="#EF9F27"/><circle cx="362" cy="344" r="8" fill="#378ADD"/><circle cx="384" cy="344" r="8" fill="#1D9E75"/>
+<line x1="402" y1="332" x2="402" y2="356" stroke="#5F5E5A"/>
+<text x="424" y="349" text-anchor="middle" font-size="14" fill="#F1EFE8">↶</text>
+<text x="450" y="349" text-anchor="middle" font-size="14" fill="#5F5E5A">↷</text>
+<line x1="468" y1="332" x2="468" y2="356" stroke="#5F5E5A"/>
+<rect x="478" y="330" width="64" height="28" rx="6" fill="#1D9E75"/><text x="510" y="349" text-anchor="middle" font-size="12" fill="#ffffff">Enter ⏎</text>
+</g>
+<text x="320" y="388" text-anchor="middle" font-size="11" fill="#5F5E5A">Enter — в буфер и закрыть · Esc — отмена · Ctrl+Z / Ctrl+Shift+Z · Del — удалить выделенное</text>
+</svg>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { boundsOf, cardAnchor, cardPortPoint, cardPorts, captureScale, commentArrowRoute, commentLeaderRoute, hitTest, hitTestLabel, hitTestLabelResize, LABEL_HANDLE_PADDING, LABEL_MAX_AUTO_HEIGHT, labelAnchor, labelBounds, labelFrameCursor, labelHandleAt, labelHandles, labelResizeHandleBounds, moved, movedLabel, normalizedBounds, pointToSegmentDistance, portHitTest, resizeCursorFor, resizedLabel, resizedShape, SHAPE_HANDLE_PADDING, SHAPE_HANDLE_SIZE, shapeHandles, shapeResizeCursor, syncChildArrows, withCardAnchor, wrapLabelLines } from '../editor/geometry';
+import { boundsOf, cardAnchor, cardPortPoint, cardPorts, captureScale, commentArrowRoute, commentLeaderRoute, hitTest, hitTestLabel, hitTestLabelResize, LABEL_HANDLE_PADDING, LABEL_MAX_AUTO_HEIGHT, labelAnchor, labelBounds, labelFrameCursor, labelHandleAt, labelHandles, labelResizeHandleBounds, moved, movedLabel, normalizedBounds, pointToSegmentDistance, portHitTest, resizeCursorFor, resizedLabel, resizedShape, SHAPE_HANDLE_PADDING, SHAPE_HANDLE_SIZE, shapeHandles, shapeResizeCursor, shouldShowCommentCard, syncChildArrows, withCardAnchor, wrapLabelLines } from '../editor/geometry';
 import type { Annotation } from '../shared';
 
 const arrow: Annotation = { id: 'a', tool: 'arrow', color: '#FF4D2E', width: 4, start: { x: 10, y: 20 }, end: { x: 110, y: 70 } };
@@ -217,5 +217,43 @@ describe('annotation geometry', () => {
     [2560, 1600, 1280, 800, 2],
   ])('maps a %sx%s capture over a %sx%s CSS viewport', (imageWidth, imageHeight, viewportWidth, viewportHeight, expected) => {
     expect(captureScale(imageWidth, imageHeight, viewportWidth, viewportHeight)).toEqual({ x: expected, y: expected });
+  });
+});
+
+describe('empty comment binding', () => {
+  const emptyRect: Annotation = { id: 'r', tool: 'rect', color: '#FF4D2E', width: 4, start: { x: 100, y: 100 }, end: { x: 200, y: 180 }, hasComment: true };
+
+  it('keeps a card for an annotation whose comment is still empty', () => {
+    expect(labelBounds(emptyRect, 600, 400)).not.toBeNull();
+    expect(labelBounds({ ...emptyRect, hasComment: false, label: '' }, 600, 400)).toBeNull();
+  });
+
+  it('shows an empty card in the editor but not in the export', () => {
+    expect(shouldShowCommentCard(emptyRect, true)).toBe(true);
+    expect(shouldShowCommentCard(emptyRect, false)).toBe(false);
+    expect(shouldShowCommentCard({ ...emptyRect, label: 'Текст' }, false)).toBe(true);
+  });
+
+  it('stores the card anchor even when the comment is empty', () => {
+    const withAnchor = withCardAnchor(emptyRect, 600, 400);
+    expect(withAnchor.labelAnchorSide).toBeDefined();
+    expect(cardAnchor(withAnchor, 600, 400)).not.toBeNull();
+    expect(commentLeaderRoute(withAnchor, [withAnchor], 600, 400)).not.toBeNull();
+  });
+
+  it('survives move and resize of the card and the shape', () => {
+    const withAnchor = withCardAnchor(emptyRect, 600, 400);
+    const movedCard = movedLabel(withAnchor, 30, 20, 600, 400);
+    const resizedCard = resizedLabel(movedCard, 'se', 40, 30, 600, 400);
+    expect(resizedCard.hasComment).toBe(true);
+    expect(moved(resizedCard, 5, -4).hasComment).toBe(true);
+    expect(labelBounds(resizedCard, 600, 400)).not.toBeNull();
+  });
+
+  it('keeps child arrows attached to an empty owner card', () => {
+    const child: Annotation = { ...arrow, id: 'child', cardOwnerId: 'r', cardPortX: 1, cardPortY: 0.5, start: { x: 0, y: 0 }, end: { x: 420, y: 260 } };
+    const synced = syncChildArrows([emptyRect, child], 600, 400).find((item) => item.id === 'child');
+    const box = labelBounds(emptyRect, 600, 400)!;
+    expect(synced).toMatchObject({ start: { x: box.x + box.width, y: box.y + box.height / 2 } });
   });
 });

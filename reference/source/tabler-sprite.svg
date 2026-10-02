@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 288 24" width="288" height="24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Tabler Icons 3.46.0, MIT. Each icon occupies a 24x24 cell. -->
+  <g id="pointer" transform="translate(0 0)"><path d="M7.904 17.563a1.2 1.2 0 0 0 2.228 .308l2.09 -3.093l4.907 4.907a1.067 1.067 0 0 0 1.509 0l1.047 -1.047a1.067 1.067 0 0 0 0 -1.509l-4.907 -4.907l3.113 -2.09a1.2 1.2 0 0 0 -.309 -2.228l-13.582 -3.904l3.904 13.563"/></g>
+  <g id="arrow-up-right" transform="translate(24 0)"><path d="M17 7l-10 10"/><path d="M8 7h9v9"/></g>
+  <g id="rectangle" transform="translate(48 0)"><path d="M3 7a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v10a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-10"/></g>
+  <g id="oval" transform="translate(72 0)"><path d="M3 12c0 -3.314 4.03 -6 9 -6s9 2.686 9 6s-4.03 6 -9 6s-9 -2.686 -9 -6"/></g>
+  <g id="pencil" transform="translate(96 0)"><path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4"/><path d="M13.5 6.5l4 4"/></g>
+  <g id="letter-t" transform="translate(120 0)"><path d="M6 4h12"/><path d="M12 4v16"/></g>
+  <g id="arrow-back-up" transform="translate(144 0)"><path d="M9 14l-4 -4l4 -4"/><path d="M5 10h11a4 4 0 1 1 0 8h-1"/></g>
+  <g id="arrow-forward-up" transform="translate(168 0)"><path d="M15 14l4 -4l-4 -4"/><path d="M19 10h-11a4 4 0 1 0 0 8h1"/></g>
+  <g id="copy" transform="translate(192 0)"><path d="M7 9.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667v-8.666"/><path d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1"/></g>
+  <g id="download" transform="translate(216 0)"><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2"/><path d="M7 11l5 5l5 -5"/><path d="M12 4v12"/></g>
+  <g id="x" transform="translate(240 0)"><path d="M18 6l-12 12"/><path d="M6 6l12 12"/></g>
+  <g id="check" transform="translate(264 0)"><path d="M5 12l5 5l10 -10"/></g>
+</svg>

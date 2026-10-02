@@ -1,0 +1,52 @@
+<svg viewBox="0 0 640 430" width="1280" height="860" xmlns="http://www.w3.org/2000/svg">
+<rect x="0" y="0" width="640" height="430" rx="8" fill="#DAD8CF"/>
+<g>
+<rect x="60" y="14" width="560" height="38" rx="8" fill="#2C2C2A"/>
+<text x="74" y="38" font-size="12" fill="#B4B2A9">Прямоугольник</text>
+<line x1="168" y1="22" x2="168" y2="44" stroke="#5F5E5A"/>
+<rect x="178" y="22" width="72" height="22" rx="5" fill="#444441"/><text x="186" y="37" font-size="11" fill="#F1EFE8">Цвет: авто</text><text x="242" y="37" font-size="9" fill="#B4B2A9">▾</text>
+<rect x="258" y="22" width="58" height="22" rx="5" fill="#444441"/><line x1="266" y1="33" x2="290" y2="33" stroke="#F1EFE8" stroke-width="3"/><text x="296" y="37" font-size="11" fill="#F1EFE8">3</text><text x="308" y="37" font-size="9" fill="#B4B2A9">▾</text>
+<rect x="324" y="22" width="112" height="22" rx="5" fill="#444441"/><text x="332" y="37" font-size="11" fill="#F1EFE8">Подпись: выноска</text><text x="426" y="37" font-size="9" fill="#B4B2A9">▾</text>
+<rect x="444" y="22" width="72" height="22" rx="5" fill="#444441"/><text x="452" y="37" font-size="11" fill="#F1EFE8">Углы: 4</text><text x="506" y="37" font-size="9" fill="#B4B2A9">▾</text>
+<line x1="528" y1="22" x2="528" y2="44" stroke="#5F5E5A"/>
+<rect x="538" y="22" width="72" height="22" rx="5" fill="#1D9E75"/><text x="574" y="37" text-anchor="middle" font-size="11" fill="#ffffff">Копировать</text>
+</g>
+<g font-family="monospace">
+<rect x="14" y="14" width="38" height="336" rx="8" fill="#2C2C2A"/>
+<rect x="20" y="22" width="26" height="26" rx="5" fill="#444441"/><text x="33" y="40" text-anchor="middle" font-size="12" fill="#F1EFE8">V</text>
+<rect x="20" y="54" width="26" height="26" rx="5" fill="#444441"/><text x="33" y="72" text-anchor="middle" font-size="12" fill="#F1EFE8">A</text>
+<rect x="20" y="86" width="26" height="26" rx="5" fill="#D85A30"/><text x="33" y="104" text-anchor="middle" font-size="12" fill="#ffffff">R</text>
+<rect x="20" y="118" width="26" height="26" rx="5" fill="#444441"/><text x="33" y="136" text-anchor="middle" font-size="12" fill="#F1EFE8">O</text>
+<rect x="20" y="150" width="26" height="26" rx="5" fill="#444441"/><text x="33" y="168" text-anchor="middle" font-size="12" fill="#F1EFE8">P</text>
+<rect x="20" y="182" width="26" height="26" rx="5" fill="#444441"/><text x="33" y="200" text-anchor="middle" font-size="12" fill="#F1EFE8">T</text>
+<line x1="22" y1="218" x2="44" y2="218" stroke="#5F5E5A"/>
+<text x="33" y="244" text-anchor="middle" font-size="14" fill="#F1EFE8">↶</text>
+<text x="33" y="272" text-anchor="middle" font-size="14" fill="#5F5E5A">↷</text>
+<line x1="22" y1="286" x2="44" y2="286" stroke="#5F5E5A"/>
+<rect x="20" y="296" width="26" height="26" rx="5" fill="#444441"/><text x="33" y="314" text-anchor="middle" font-size="12" fill="#F1EFE8">⎘</text>
+<text x="33" y="342" text-anchor="middle" font-size="12" fill="#B4B2A9">✕</text>
+</g>
+<rect x="120" y="76" width="470" height="270" rx="4" fill="#ffffff" stroke="#888780"/>
+<rect x="120" y="76" width="470" height="90" fill="#2C2C2A"/>
+<rect x="140" y="100" width="160" height="12" rx="3" fill="#5F5E5A"/><rect x="140" y="122" width="240" height="8" rx="3" fill="#444441"/>
+<rect x="140" y="190" width="280" height="10" rx="3" fill="#F1EFE8"/><rect x="140" y="210" width="220" height="10" rx="3" fill="#F1EFE8"/>
+<rect x="140" y="250" width="110" height="32" rx="6" fill="#378ADD"/><text x="195" y="271" text-anchor="middle" font-size="12" fill="#ffffff">Сохранить</text>
+<rect x="130" y="92" width="190" height="46" rx="4" fill="none" stroke="#D85A30" stroke-width="3"/>
+<g fill="#ffffff" stroke="#D85A30" stroke-width="1.5">
+<rect x="126" y="88" width="8" height="8"/><rect x="316" y="88" width="8" height="8"/><rect x="126" y="134" width="8" height="8"/><rect x="316" y="134" width="8" height="8"/>
+<rect x="221" y="88" width="8" height="8"/><rect x="221" y="134" width="8" height="8"/><rect x="126" y="111" width="8" height="8"/><rect x="316" y="111" width="8" height="8"/>
+</g>
+<line x1="320" y1="115" x2="360" y2="105" stroke="#F1EFE8" stroke-width="2"/>
+<rect x="360" y="92" width="120" height="26" rx="13" fill="#F1EFE8"/><text x="420" y="109" text-anchor="middle" font-size="12" fill="#2C2C2A">Заголовок мелкий</text>
+<text x="490" y="132" font-size="10" fill="#B4B2A9">светлая пилюля на тёмном</text>
+<ellipse cx="195" cy="266" rx="70" ry="26" fill="none" stroke="#D85A30" stroke-width="3"/>
+<line x1="258" y1="250" x2="300" y2="228" stroke="#2C2C2A" stroke-width="2"/>
+<rect x="300" y="206" width="150" height="44" rx="8" fill="#2C2C2A"/>
+<text x="310" y="223" font-size="12" fill="#ffffff">Не сохраняет,</text><text x="310" y="240" font-size="12" fill="#ffffff">если поле пустое</text>
+<line x1="405" y1="230" x2="405" y2="244" stroke="#ffffff" stroke-width="1.5"/>
+<rect x="298" y="204" width="154" height="48" rx="9" fill="none" stroke="#378ADD" stroke-width="1.5" stroke-dasharray="3 3"/>
+<text x="460" y="240" font-size="10" fill="#5F5E5A">тёмная на светлом</text>
+<text x="300" y="268" font-size="10" fill="#378ADD">Enter — новая строка · Ctrl+Enter — готово</text>
+<text x="320" y="376" text-anchor="middle" font-size="11" fill="#5F5E5A">Вне поля ввода: Enter / Ctrl+Enter — в буфер · Esc — отмена · Ctrl+Z / Ctrl+Shift+Z · Del</text>
+<text x="320" y="396" text-anchor="middle" font-size="11" fill="#5F5E5A">Выбор (V): тянем фигуру целиком, ручки — размер, подпись — отдельно, стрелка — концы</text>
+</svg>

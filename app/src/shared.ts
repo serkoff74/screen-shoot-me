@@ -12,6 +12,11 @@ export type BaseAnnotation = {
   color: string;
   width: number;
   label?: string;
+  /**
+   * True once the annotation owns a comment card. Kept even while the comment
+   * text is empty, so the card and its leader stay bound to the annotation.
+   */
+  hasComment?: boolean;
   labelX?: number;
   labelY?: number;
   /** Explicit comment-card dimensions in canvas pixels. */

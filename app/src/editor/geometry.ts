@@ -61,10 +61,22 @@ export function boundsOf(annotation: Annotation): Bounds {
   return normalizedBounds(annotation.start, annotation.end);
 }
 
+/**
+ * Whether the annotation should show a comment card. An empty comment still
+ * shows its (placeholder) card in the editor, but `includeEmpty=false` hides it
+ * from exports so an untouched card never leaks into the PNG.
+ */
+export function shouldShowCommentCard(annotation: Annotation, includeEmpty = true): boolean {
+  if (annotation.label?.trim()) return true;
+  return Boolean(annotation.hasComment) && includeEmpty;
+}
+
 export function labelLayout(annotation: Annotation, canvasWidth: number, canvasHeight: number): LabelLayout | null {
-  const label = annotation.label?.trim();
-  if (!label) return null;
-  const unwrapped = label.split('\n');
+  const label = annotation.label ?? '';
+  // A card exists while the comment has text, or as an (empty) placeholder once
+  // the annotation owns a comment. The binding must survive an empty comment.
+  if (!label.trim() && !annotation.hasComment) return null;
+  const unwrapped = label ? label.split('\n') : [''];
   const naturalWidth = Math.max(...unwrapped.map((line) => line.length * LABEL_CHAR_WIDTH)) + LABEL_HORIZONTAL_PADDING;
   const width = Math.max(LABEL_MIN_WIDTH, annotation.labelWidth ?? naturalWidth);
   const lines = wrapLabelLines(label, width - LABEL_HORIZONTAL_PADDING);
@@ -292,7 +304,7 @@ export function commentArrowRoute(annotation: Annotation, annotations: Annotatio
   if (annotation.tool !== 'arrow') return null;
   const owner = annotation.cardOwnerId
     ? annotations.find((item) => item.id === annotation.cardOwnerId)
-    : (annotation.label?.trim() ? annotation : undefined);
+    : (annotation.hasComment || annotation.label?.trim() ? annotation : undefined);
   if (!owner) return null;
   const card = labelBounds(owner, canvasWidth, canvasHeight);
   if (!card) return null;
@@ -369,7 +381,7 @@ function shapeAnchorPoint(annotation: Annotation, point: Point): Point {
  */
 export function commentLeaderRoute(annotation: Annotation, annotations: Annotation[], canvasWidth: number, canvasHeight: number, padding = ROUTE_PADDING): Point[] | null {
   if (annotation.tool !== 'rect' && annotation.tool !== 'ellipse' && annotation.tool !== 'pencil') return null;
-  if (!annotation.label?.trim()) return null;
+  if (!annotation.label?.trim() && !annotation.hasComment) return null;
   const anchor = cardAnchor(annotation, canvasWidth, canvasHeight);
   if (!anchor) return null;
   const target = shapeAnchorPoint(annotation, anchor.point);

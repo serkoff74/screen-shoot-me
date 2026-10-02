@@ -1,6 +1,6 @@
 import type { Annotation, Bounds, Point } from '../shared';
 import { UI_BLUE } from '../shared';
-import { boundsOf, cardPorts, commentArrowRoute, commentLeaderRoute, LABEL_HANDLE_PADDING, LABEL_HANDLE_SIZE, labelBounds, labelLayout, SHAPE_HANDLE_PADDING, shapeHandles } from './geometry';
+import { boundsOf, cardPorts, commentArrowRoute, commentLeaderRoute, LABEL_HANDLE_PADDING, LABEL_HANDLE_SIZE, labelBounds, labelLayout, SHAPE_HANDLE_PADDING, shapeHandles, shouldShowCommentCard } from './geometry';
 
 /** Catmull-Rom tension for routed arrows (1 = standard, lower = tighter to the waypoints). */
 const ROUTE_SMOOTHING = 0.6;
@@ -72,15 +72,33 @@ function contrastHalo(ctx: CanvasRenderingContext2D, annotation: Annotation): st
   }
 }
 
-function drawLabel(ctx: CanvasRenderingContext2D, annotation: Annotation): void {
+function drawLabel(ctx: CanvasRenderingContext2D, annotation: Annotation, includeEmpty = true): void {
   const label = annotation.label?.trim();
-  if (!label) return;
+  const empty = !label;
+  if (!shouldShowCommentCard(annotation, includeEmpty)) return;
   const layout = labelLayout(annotation, ctx.canvas.width, ctx.canvas.height);
   if (!layout) return;
   const { bounds: labelBox, lines } = layout;
   ctx.save();
   ctx.font = '600 15px Inter, system-ui, sans-serif';
   const { x, y, width, height } = labelBox;
+  if (empty) {
+    // Editor-only placeholder: a dashed card that shows the comment binding
+    // exists without leaking an empty card into the exported PNG.
+    ctx.fillStyle = 'rgba(20,28,42,.45)';
+    ctx.beginPath();
+    ctx.roundRect(x, y, width, height, 8);
+    ctx.fill();
+    ctx.setLineDash([7, 5]);
+    ctx.strokeStyle = 'rgba(255,255,255,.5)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(255,255,255,.6)';
+    ctx.fillText('Комментарий', x + 11, y + 21);
+    ctx.restore();
+    return;
+  }
   ctx.fillStyle = 'rgba(20,28,42,.94)';
   ctx.beginPath();
   ctx.roundRect(x, y, width, height, 8);
@@ -100,7 +118,8 @@ function drawLabel(ctx: CanvasRenderingContext2D, annotation: Annotation): void 
  * Dashed coral leader with a dashed contrast halo that ties a shape's comment
  * card to the shape itself, bending around other comment cards.
  */
-function drawCommentLeader(ctx: CanvasRenderingContext2D, annotation: Annotation, annotations: Annotation[]): void {
+function drawCommentLeader(ctx: CanvasRenderingContext2D, annotation: Annotation, annotations: Annotation[], includeEmpty = true): void {
+  if (!shouldShowCommentCard(annotation, includeEmpty)) return;
   const route = commentLeaderRoute(annotation, annotations, ctx.canvas.width, ctx.canvas.height);
   if (!route || route.length < 2) return;
   const halo = contrastHalo(ctx, annotation);
@@ -134,9 +153,9 @@ function drawCommentLeader(ctx: CanvasRenderingContext2D, annotation: Annotation
   ctx.restore();
 }
 
-function drawAnnotation(ctx: CanvasRenderingContext2D, annotation: Annotation, annotations: Annotation[]): void {
+function drawAnnotation(ctx: CanvasRenderingContext2D, annotation: Annotation, annotations: Annotation[], includeEmpty = true): void {
   if (annotation.tool === 'text') {
-    drawLabel(ctx, annotation);
+    drawLabel(ctx, annotation, includeEmpty);
     return;
   }
   const halo = contrastHalo(ctx, annotation);
@@ -158,8 +177,8 @@ function drawAnnotation(ctx: CanvasRenderingContext2D, annotation: Annotation, a
     ctx.fill();
   }
   ctx.restore();
-  drawCommentLeader(ctx, annotation, annotations);
-  drawLabel(ctx, annotation);
+  drawCommentLeader(ctx, annotation, annotations, includeEmpty);
+  drawLabel(ctx, annotation, includeEmpty);
 }
 
 function drawSelection(ctx: CanvasRenderingContext2D, annotation: Annotation): void {
@@ -195,6 +214,8 @@ function drawSelection(ctx: CanvasRenderingContext2D, annotation: Annotation): v
 export type RenderOptions = {
   selectedId?: string | null;
   showSelection?: boolean;
+  /** Draw placeholder cards for comments that have no text yet. */
+  includeEmptyComments?: boolean;
   /** Annotation id whose ports should be shown in hover state (non-selected card) */
   hoverAnnotationId?: string | null;
   /** Port index (0-7) currently under the cursor; -1 or null = none */
@@ -292,7 +313,8 @@ function drawLabelSelection(ctx: CanvasRenderingContext2D, annotation: Annotatio
 export function drawScene(ctx: CanvasRenderingContext2D, background: HTMLCanvasElement, annotations: Annotation[], options: RenderOptions = {}): void {
   ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
   ctx.drawImage(background, 0, 0, ctx.canvas.width, ctx.canvas.height);
-  annotations.forEach((annotation) => drawAnnotation(ctx, annotation, annotations));
+  const includeEmptyComments = options.includeEmptyComments ?? true;
+  annotations.forEach((annotation) => drawAnnotation(ctx, annotation, annotations, includeEmptyComments));
   if (options.showSelection && options.selectedId) {
     const selected = annotations.find((item) => item.id === options.selectedId);
     if (selected) {
@@ -313,7 +335,7 @@ export function exportPng(background: HTMLCanvasElement, annotations: Annotation
   canvas.height = background.height;
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) throw new Error('Canvas 2D недоступен');
-  drawScene(ctx, background, annotations);
+  drawScene(ctx, background, annotations, { includeEmptyComments: false });
   return canvas.toDataURL('image/png');
 }
 

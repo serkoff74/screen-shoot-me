@@ -299,13 +299,13 @@ function showEditor(root: HTMLElement, initialBackground: HTMLCanvasElement, set
     const scale = canvas.width / canvasRect.width;
     const rect = popup.getBoundingClientRect();
     const next = annotations.map((a) => a.id === editingId ? withCardAnchor({
-      ...a, label: value, labelX: (rect.left - canvasRect.left) * scale, labelY: (rect.top - canvasRect.top) * scale,
+      ...a, label: value, hasComment: true, labelX: (rect.left - canvasRect.left) * scale, labelY: (rect.top - canvasRect.top) * scale,
       labelWidth: rect.width * scale,
       labelHeight: commentHasManualHeight ? rect.height * scale : undefined,
       labelHeightManual: commentHasManualHeight,
     } as Annotation, canvas.width, canvas.height) : a);
     const old = annotations.find((a) => a.id === editingId);
-    if (old && (old.label !== value || old.labelX !== next.find((a) => a.id === editingId)?.labelX || old.labelY !== next.find((a) => a.id === editingId)?.labelY || old.labelWidth !== next.find((a) => a.id === editingId)?.labelWidth || old.labelHeight !== next.find((a) => a.id === editingId)?.labelHeight || old.labelHeightManual !== next.find((a) => a.id === editingId)?.labelHeightManual)) setAnnotations(next);
+    if (old && (old.label !== value || !old.hasComment || old.labelX !== next.find((a) => a.id === editingId)?.labelX || old.labelY !== next.find((a) => a.id === editingId)?.labelY || old.labelWidth !== next.find((a) => a.id === editingId)?.labelWidth || old.labelHeight !== next.find((a) => a.id === editingId)?.labelHeight || old.labelHeightManual !== next.find((a) => a.id === editingId)?.labelHeightManual)) setAnnotations(next);
     popup.classList.add('hidden');
     editingId = null;
     canvas.focus();
@@ -510,7 +510,7 @@ function showEditor(root: HTMLElement, initialBackground: HTMLCanvasElement, set
     const p = point(event);
     // Dragging from a connection port of the selected comment card starts a new
     // child arrow that points to another spot on the screenshot.
-    const portOwner = currentTool === 'select' && selectedId ? annotations.find((annotation) => annotation.id === selectedId && annotation.label?.trim()) : undefined;
+    const portOwner = currentTool === 'select' && selectedId ? annotations.find((annotation) => annotation.id === selectedId && (annotation.hasComment || annotation.label?.trim())) : undefined;
     if (portOwner) {
       const portIndex = portHitTest(portOwner, p, canvas.width, canvas.height, 8);
       if (portIndex >= 0) {
@@ -622,7 +622,7 @@ function showEditor(root: HTMLElement, initialBackground: HTMLCanvasElement, set
       return;
     }
     const p = point(event);
-    const selectedCard = currentTool === 'select' && selectedId ? annotations.find((annotation) => annotation.id === selectedId && annotation.label?.trim()) : undefined;
+    const selectedCard = currentTool === 'select' && selectedId ? annotations.find((annotation) => annotation.id === selectedId && (annotation.hasComment || annotation.label?.trim())) : undefined;
     const hitPort = selectedCard ? portHitTest(selectedCard, p, canvas.width, canvas.height, 8) : -1;
     const portIndex = hitPort >= 0 ? hitPort : null;
     if (portIndex !== hoverPortIndex) { hoverPortIndex = portIndex; render(); }
@@ -667,7 +667,9 @@ function showEditor(root: HTMLElement, initialBackground: HTMLCanvasElement, set
       if (currentTool === 'select') return;
     }
     if (draft && isDrawable(draft)) {
-      const finished = draft;
+      // Every shape drawn here owns a comment card, even before the user types:
+      // the binding must not disappear when the comment stays empty.
+      const finished = draft.cardOwnerId ? draft : { ...draft, hasComment: true } as Annotation;
       draft = null;
       setAnnotations([...annotations, finished]);
       if (finished.cardOwnerId) { selectedId = finished.id; render(); }

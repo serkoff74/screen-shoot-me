@@ -1,0 +1,20 @@
+{
+  "chrome": "Chrome/153.0.8010.36",
+  "extensionId": "egoapejcamijpgkmjbnijkeeplkfkahh",
+  "errors": [],
+  "checks": {
+    "enterCommits": true,
+    "arrowIsCoral": true,
+    "copyMessage": "PNG скопирован",
+    "copy": true,
+    "ctrlEnterNewline": true,
+    "blueSelectionUi": true,
+    "saveTooltip": true,
+    "secondEnterCloses": true,
+    "noRuntimeErrors": true
+  },
+  "artifacts": [
+    "example-1-arrow-comment.png",
+    "example-2-rectangle-comment.png"
+  ]
+}
